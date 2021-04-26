@@ -1,0 +1,17 @@
+__pycache__/
+
+.idea/
+
+data/
+result/
+
+*.mp4
+*.jpg
+*.png
+
+*.log
+*.pt
+
+temp/
+try.py
+logger.py
