@@ -22,16 +22,16 @@ from av import VideoFrame
 import cv2
 import torch
 
-
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
-from media import MediaPlayer, MediaRelay, MediaPlayerDelta, MediaRecorderDelta
+from media import MediaPlayer, MediaRelay, MediaPlayerDelta, MediaRecorderDelta, MediaBlackhole
 from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution
 from model import SingleNetwork
 
 logger = logging.getLogger('Receiver')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
+
 
 class SuperResolutionProcessor:
     def __init__(self, args):
@@ -127,13 +127,16 @@ class VideoProcessTrack(MediaStreamTrack):
             raise NotImplementedError
 
 
-
-async def comm_server(pc, signaling):
-
+async def comm_server(pc, signaling, process_type, processor, recorder_raw, recorder_sr):
     @pc.on('track')
     def on_track(track):
         logger.info('Received track from server')
-        recorder_raw.addTrack(relay.subscribe(track))
+        if track.kind == 'video':
+            recorder_raw.addTrack(relay.subscribe(track))
+        else:
+            # Not consider audio at this stage
+            # recorder_raw.addTrack(track)  # add audio track to recorder_raw
+            pass
 
     @pc.on('datachannel')
     def on_datachannel(channel: RTCDataChannel):
@@ -180,31 +183,68 @@ async def comm_server(pc, signaling):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Conferencing peer (Receiver)')
+    parser.add_argument('--process-type', type=str, default='sr', choices=('sr', 'grayish', 'none'))
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
+    parser.add_argument('--log-dir', type=str, default='result/logs', help='Directory for logs')
 
     # video
-    parser.add_argument('--hr-height', type=int, default=1080, help='Height of origin high-resolution video')
+    parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
+    parser.add_argument('--record-sr-fn', type=str, default='sr.mp4', help='SR video record name')
+    parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
+    parser.add_argument('--not-record-sr', action='store_true')
+    parser.add_argument('--not-record-raw', action='store_true')
+    parser.add_argument('--hr-height', type=int, default=720, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=360, help='Height of transformed low-resolution video')
+    parser.add_argument('--fps', type=int, default=5)
+
+    # model
+    parser.add_argument('--not-use-cuda', action='store_true')
+    parser.add_argument('--model-scale', type=int, default=3)
+    parser.add_argument('--model-num-blocks', type=int, default=8)
+    parser.add_argument('--model-num-features', type=int, default=8)
+
+    # inference
+    parser.add_argument('--load-pretrained', action='store_true')
+    parser.add_argument('--pretrained-fp', type=str)
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
     parser.add_argument('--signaling-port', type=int, default=10001, help='TCP socket signaling port')
     args = parser.parse_args()
 
+    os.makedirs(args.record_dir, exist_ok=True)
+
     logging.basicConfig(level=logging.INFO)
     logger.setLevel(level=logging.DEBUG if args.debug else logging.INFO)
 
+    # RTC
     signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port)  # signaling server
     pc = RTCPeerConnection()
 
-    recorder_raw = MediaRecorderDelta('data/video/aa.mp4',
-                                      logfile=None,
-                                      width=640,height=360,fps=5)
+    # media sink
+    low_resolution = get_resolution(args.lr_height)
+    if args.record_dir and not args.not_record_raw:
+        recorder_raw = MediaRecorderDelta(os.path.join(args.record_dir, args.record_raw_fn),
+                                          logfile=os.path.join(args.log_dir, 'receiver_recorder_raw.log'),
+                                          width=low_resolution.width, height=low_resolution.height, fps=args.fps)
+    else:
+        recorder_raw = MediaBlackhole()
+
+    high_resolution = get_resolution(args.hr_height)
+    if args.record_dir and not args.not_record_sr:
+        recorder_sr = MediaRecorderDelta(os.path.join(args.record_dir, args.record_sr_fn),
+                                         logfile=os.path.join(args.log_dir, 'receiver_recorder_sr.log'),
+                                         width=high_resolution.width, height=high_resolution.height, fps=args.fps)
+    else:
+        recorder_sr = MediaBlackhole()
+
+    # inference
+    processor = SuperResolutionProcessor(args)
 
     # run receiver
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(comm_server(pc, signaling))
+        loop.run_until_complete(comm_server(pc, signaling, args.process_type, processor, recorder_raw, recorder_sr))
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running receiver')
     finally:

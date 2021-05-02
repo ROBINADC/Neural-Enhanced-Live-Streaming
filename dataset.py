@@ -176,7 +176,7 @@ class DummyDataset(Dataset):
 
     def __getitem__(self, index):
         x = torch.rand(3, 360, 640)
-        y = torch.rand(3, 1080, 1920)
+        y = torch.rand(3, 720, 1280)
         return x, y
 
     def __len__(self):

@@ -86,8 +86,10 @@ def get_resolution(height_or_quality: int) -> Resolution:
     """
     Get resolution for 16:9 screen
     """
-    if height_or_quality in (1080, 3):
+    if height_or_quality in (1080, 4):
         return Resolution(1920, 1080)
+    elif height_or_quality in (720, 3):
+        return Resolution(1280, 720)
     elif height_or_quality in (540, 2):
         return Resolution(960, 540)
     elif height_or_quality in (360, 1):

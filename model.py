@@ -10,61 +10,6 @@ import math
 VALID_SCALES = (1, 2, 3, 4)
 
 
-def get_nas_config(quality: str) -> dict:
-    if quality == 'low':
-        return {4: {'block': 8, 'feature': 9, 'output_filter': 2},
-                3: {'block': 8, 'feature': 8, 'output_filter': 2},
-                2: {'block': 8, 'feature': 4, 'output_filter': 2},
-                1: {'block': 1, 'feature': 2, 'output_filter': 1}}
-    elif quality == 'medium':
-        return {4: {'block': 8, 'feature': 21, 'output_filter': 2},
-                3: {'block': 8, 'feature': 18, 'output_filter': 2},
-                2: {'block': 8, 'feature': 9, 'output_filter': 2},
-                1: {'block': 1, 'feature': 7, 'output_filter': 1}}
-    elif quality == 'high':
-        return {4: {'block': 8, 'feature': 32, 'output_filter': 2},
-                3: {'block': 8, 'feature': 29, 'output_filter': 2},
-                2: {'block': 8, 'feature': 18, 'output_filter': 2},
-                1: {'block': 1, 'feature': 16, 'output_filter': 1}}
-    elif quality == 'ultra':
-        return {4: {'block': 8, 'feature': 48, 'output_filter': 2},
-                3: {'block': 8, 'feature': 42, 'output_filter': 2},
-                2: {'block': 8, 'feature': 26, 'output_filter': 2},
-                1: {'block': 1, 'feature': 26, 'output_filter': 1}}
-    else:
-        raise NotImplementedError
-
-
-class MultiNetwork(nn.Module):
-    def __init__(self, config: dict, activation=nn.ReLU(True)):
-        super(MultiNetwork, self).__init__()
-
-        self.networks = nn.ModuleList()
-        self.scale_to_index = {}  # lookup dict
-
-        for i, scale in enumerate(config):
-            self.networks.append(
-                SingleNetwork(scale=scale, num_blocks=config[scale]['block'], num_channels=3, num_features=config[scale]['feature'],
-                              bias=True, activation=activation))
-            self.scale_to_index[scale] = i
-
-        self._target_scale = None
-
-    @property
-    def target_scale(self):
-        return self._target_scale
-
-    @target_scale.setter
-    def target_scale(self, scale):
-        assert scale in self.scale_to_index.keys()
-        self._target_scale = scale
-
-    def forward(self, x):
-        assert self._target_scale is not None
-        x = self.networks[self.scale_to_index[self._target_scale]].forward(x)
-        return x
-
-
 class SingleNetwork(nn.Module):
     def __init__(self, scale, num_blocks, num_channels, num_features, bias=True, activation=nn.ReLU(True)):
         super(SingleNetwork, self).__init__()
@@ -182,8 +127,7 @@ if __name__ == '__main__':
     from torch.utils.data.dataloader import DataLoader
     from dataset import DummyDataset
 
-    model = MultiNetwork(get_nas_config('low'))
-    model.target_scale = 3
+    model = SingleNetwork(2, 6, 3, 6)
 
     model.to('cuda')
     for i, (xs, ys) in enumerate(DataLoader(DummyDataset(), 4)):

@@ -242,7 +242,7 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
     # video
-    parser.add_argument('--hr-height', type=int, default=1080, help='Height of origin high-resolution video')
+    parser.add_argument('--hr-height', type=int, default=720, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=360, help='Height of transformed low-resolution video')
     parser.add_argument('--patch-grid-height', type=int, default=9, help='Height of the patch grid')
     parser.add_argument('--patch-grid-width', type=int, default=16, help='Width of the patch grid')
@@ -253,7 +253,7 @@ if __name__ == '__main__':
     parser.add_argument('--cam-videosize', type=str, default='640x360', help='Camera ingest resolution')
 
     # signaling
-    parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')
+    parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
     parser.add_argument('--signaling-port', type=int, default=9999, help='TCP socket signaling port')
     args = parser.parse_args()
 
