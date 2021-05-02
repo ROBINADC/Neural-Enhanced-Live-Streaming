@@ -31,7 +31,9 @@ from misc import Patch, bytes_to_ndarray, get_resolution
 
 logger = logging.getLogger('server')
 
+track_recv_event = asyncio.Event()
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
+track_global = None
 
 
 def run_trainer(patch_queue, args):
@@ -179,98 +181,14 @@ class OnlineTrainer:
         self.logger.debug(f'[OnlineTrainer] {msg}')
 
 
-class SuperResolutionProcessor:
-    def __init__(self, args):
-        self.model = SingleNetwork(args.model_scale, num_blocks=args.model_num_blocks,
-                                   num_channels=3, num_features=args.model_num_features)
-        self.load_pretrained = args.load_pretrained
-        self.pretrained_fp = args.pretrained_fp
-        self.device = 'cuda' if not args.not_use_cuda else 'cpu'
-
-        self._setup()
-
-    def _setup(self):
-        self.model = self.model.half().to(self.device)
-        if self.load_pretrained and os.path.exists(self.pretrained_fp):
-            self.model.load_state_dict(torch.load(self.pretrained_fp))
-            self.__log_info('load pretrained model')
-        self.model.eval()
-        torch.set_grad_enabled(False)  # affect other part ?
-        self.__log_info('finish setup')
-
-    def process(self, image: np.ndarray) -> np.ndarray:
-        x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3)
-        x = x.permute(2, 0, 1).half()  # (3, lr_height, lr_width)
-        x.div_(255)
-        x.unsqueeze_(0)  # (1, 3, lr_height, lr_width)
-
-        out = self.model(x)  # (1, 3, hr_height, hr_width)
-        out = out.data[0].permute(1, 2, 0)
-        out = out * 255
-        out = torch.clamp(out, 0, 255)
-        out = out.byte()
-
-        hr_image = out.cpu().numpy()
-        return hr_image
-
-    def __log_info(self, msg):
-        logger.info(f'[SuperResolutionProcessor] {msg}')
-
-
-class VideoProcessTrack(MediaStreamTrack):
+async def comm_sender():
     """
-    A video stream track that processes frames from an another track
+    Communicates with streamer
+    :return:
+    :rtype:
     """
 
-    kind = 'video'
-
-    def __init__(self, track, process_type: str, processor=None):
-        """
-        :param track: the original track to be processed
-        :param process_type:
-        """
-        super().__init__()
-        self.track = track
-        self.type = process_type
-        self.processor = processor
-
-        self.count = 0
-
-        # self.timer = Timer()
-        # self.timer.start()
-
-    async def recv(self):
-        """
-        Receive (generate) the next VideoFrame
-        :return: frame
-        """
-        frame = await self.track.recv()  # read next frame from origin track
-        if self.type == 'sr':
-            img = frame.to_ndarray(format='bgr24')
-            img = self.processor.process(img)
-
-            self.count += 1
-            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
-            new_frame.pts = frame.pts  # Presentation TimeStamps, denominated in terms of timebase, here
-            new_frame.time_base = frame.time_base  # a unit of time, here Fraction(1, 90000) (of a second)
-
-            return new_frame
-        elif self.type == 'grayish':
-            img = frame.to_ndarray(format='bgr24')  # (frame.height, frame.width, 3)
-
-            img[::2, ::2, :] = 128
-            img[1::2, 1::2, :] = 128
-
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
-            new_frame.pts = frame.pts  # Presentation TimeStamps, denominated in terms of timebase, here
-            new_frame.time_base = frame.time_base  # a unit of time, here Fraction(1, 90000) (of a second)
-            # Multiply pts with time_base yields the playout time of a frame
-            return new_frame
-        elif self.type == 'none':
-            return frame
-        else:
-            raise NotImplementedError
+    pass
 
 
 async def run_server(pc: RTCPeerConnection, signaling, process_type, processor, recorder_raw, recorder_sr,
@@ -288,8 +206,13 @@ async def run_server(pc: RTCPeerConnection, signaling, process_type, processor, 
         """
         logger.info('Received %s track', track.kind)
         if track.kind == 'video':
-            recorder_raw.addTrack(relay.subscribe(track))
-            recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), process_type, processor))
+            global track_global
+            track_global = track
+            track_recv_event.set()
+            # relay.subscribe(track)
+
+            # recorder_raw.addTrack(relay.subscribe(track))
+            # recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), process_type, processor))
         else:
             # Not consider audio at this stage
             # recorder_raw.addTrack(track)  # add audio track to recorder_raw
@@ -334,13 +257,76 @@ async def run_server(pc: RTCPeerConnection, signaling, process_type, processor, 
         if isinstance(obj, RTCSessionDescription):
             logger.info('Received remote description')
             await pc.setRemoteDescription(obj)
-            await recorder_raw.start()
-            await recorder_sr.start()
+            # await recorder_raw.start()
+            # await recorder_sr.start()
         elif isinstance(obj, RTCIceCandidate):
             logger.info('Received remote candidate')
             await pc.addIceCandidate(obj)
         elif obj is BYE:
             logger.info('Exiting')
+            break
+
+
+async def comm_receiver(pc, signaling):
+    def log_info(msg):
+        logger.info(f'@Receiver {msg}')
+
+    await signaling.connect()
+    log_info('Signaling connected')
+
+    await track_recv_event.wait()
+    log_info('got track')
+
+    pc.addTrack(relay.subscribe(track_global))
+    #
+    # pc.addTransceiver('video', direction='recvonly')
+    # pc.addTransceiver('audio', direction='recvonly')
+    #
+    # @pc.on('track')
+    # def on_track(track):
+    #     """
+    #     Callback function for receiving track from client
+    #     """
+    #     logger.info('Received %s track', track.kind)
+    #     if track.kind == 'video':
+    #         recorder_raw.addTrack(relay.subscribe(track))
+    #         recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), process_type, processor))
+    #     else:
+    #         # Not consider audio at this stage
+    #         # recorder_raw.addTrack(track)  # add audio track to recorder_raw
+    #         pass
+
+    # dummy channel
+    dummy_channel = pc.createDataChannel('dummy')
+
+    @dummy_channel.on('open')
+    def on_dummy_channel_open():
+        dummy_channel.send('I am server')
+
+    @dummy_channel.on('message')
+    def on_dummy_channel_message(msg):
+        # log_info(f'received {msg}')
+        dummy_channel.send('I am server')
+
+    @dummy_channel.on('close')
+    def on_dummy_channel_close():
+        log_info('dummy channel close')
+
+    await pc.setLocalDescription(await pc.createOffer())  # create SDP offer and set as local description
+    await signaling.send(pc.localDescription)  # send local description to signal server
+
+    # consume signaling
+    while True:
+        obj = await signaling.receive()
+
+        if isinstance(obj, RTCSessionDescription):
+            log_info('Received remote description')
+            await pc.setRemoteDescription(obj)
+        elif isinstance(obj, RTCIceCandidate):
+            log_info('Received remote candidate')
+            await pc.addIceCandidate(obj)
+        elif obj is BYE:
+            log_info('Exiting')
             break
 
 
@@ -421,22 +407,34 @@ if __name__ == '__main__':
     train_process.start()
 
     # inference
-    processor = SuperResolutionProcessor(args)
+    # processor = SuperResolutionProcessor(args)
+    processor = None
+
+    # receiver
+    pc_recv = RTCPeerConnection()
+    signaling_recv = TcpSocketSignaling(args.signaling_host, 10001)
 
     # run server
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run_server(pc, signaling, args.process_type, processor, recorder_raw, recorder_sr, patch_queue))
+        # loop.run_until_complete(run_server(pc, signaling, args.process_type, processor, recorder_raw, recorder_sr, patch_queue))
+        loop.run_until_complete(asyncio.gather(run_server(pc, signaling, args.process_type, processor, recorder_raw, recorder_sr, patch_queue),
+                                               comm_receiver(pc_recv, signaling_recv)
+                                               ))
+
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running server')
     finally:
         # cleanup
         loop.run_until_complete(signaling.close())
         logger.info('Signaling close')
-        loop.run_until_complete(recorder_raw.stop_after_finish())
-        loop.run_until_complete(recorder_sr.stop_after_finish())
+        # loop.run_until_complete(recorder_raw.stop_after_finish())
+        # loop.run_until_complete(recorder_sr.stop_after_finish())
         loop.run_until_complete(pc.close())  # pc closes then no track. though, recording can last long a little bit
         logger.info('pc close')
+
+        loop.run_until_complete(signaling_recv.close())
+        loop.run_until_complete(pc_recv.close())
 
     patch_queue.close()
     train_process.terminate()

@@ -1,7 +1,6 @@
 """
-Video conferencing peer
-"_a" indicates ingest peer.
-However, the distinction of ingest peer and playout peer should be merged someday.
+Video conferencing sender peer
+However, the distinction of sender peer and receiver peer should be merged someday.
 """
 
 __author__ = "Yihang Wu"
