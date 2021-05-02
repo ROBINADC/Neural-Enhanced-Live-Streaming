@@ -58,16 +58,16 @@ class Trainer:
 
 if __name__ == '__main__':
     LR_DIR = 'data/360p'
-    HR_DIR = 'data/1080p'
-    CKPT_DIR = 'result/ckpt'
+    HR_DIR = 'data/720p'
+    CKPT_DIR = 'data/pretrained'
 
     os.makedirs(CKPT_DIR, exist_ok=True)
 
-    model = SingleNetwork(3, 8, 3, 8)
+    model = SingleNetwork(2, 6, 3, 6)
     dataset = FixedDataset(LR_DIR, HR_DIR)
     trainer = Trainer(model, dataset, CKPT_DIR)
 
-    for epoch in range(10):
+    for epoch in range(20):
         trainer.train_one_epoch()
         trainer.validate()
     trainer.save_model()
