@@ -12,28 +12,26 @@ import threading
 import time
 import asyncio
 
-import numpy as np
-from av import VideoFrame
-import cv2
+# import numpy as np
+# from av import VideoFrame
+# import cv2
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data.dataloader import DataLoader
 import torch.multiprocessing as mp
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 
-from media import MediaBlackhole, MediaRelay, MediaRecorderDelta
+from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import Patch, bytes_to_ndarray, get_resolution
+from misc import AsyncContainer, Patch, bytes_to_ndarray
 
 logger = logging.getLogger('server')
-
-track_recv_event = asyncio.Event()
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
-track_global = None
+track_container = AsyncContainer()
 
 
 def run_trainer(patch_queue, args):
@@ -111,7 +109,7 @@ class OnlineTrainer:
                     else:
                         self.__log_warning(f'current epoch duration {elapse:.2f} is greater than {self.duration_per_epoch}')
         except KeyboardInterrupt:
-            self.__log_info('interrupt training')
+            self.__log_info('keyboard interrupt training')
         # fetch_thread.join()
 
     def extend_dataset(self):
@@ -185,6 +183,7 @@ async def comm_sender(pc, signaling, patch_queue):
     """
     Communicates with sender
     """
+
     def log_info(msg, *args):
         logger.info(f'@Sender {msg}', *args)
 
@@ -201,11 +200,8 @@ async def comm_sender(pc, signaling, patch_queue):
         """
         log_info(f'Received {track.kind} track')
         if track.kind == 'video':
-            global track_global
-            track_global = track
-            track_recv_event.set()  # TODO: make it a class
-            # relay.subscribe(track)
-
+            track_container.set_content(track)
+            log_info('Got track from sender')
         else:
             # Not consider audio at this stage
             pass
@@ -256,82 +252,6 @@ async def comm_sender(pc, signaling, patch_queue):
             log_info('Exiting')
             break
 
-#
-# async def run_server(pc: RTCPeerConnection, signaling, process_type, processor, recorder_raw, recorder_sr,
-#                      patch_queue):
-#     await signaling.connect()
-#     logger.info('Signaling connected')
-#
-#     pc.addTransceiver('video', direction='recvonly')
-#     pc.addTransceiver('audio', direction='recvonly')
-#
-#     @pc.on('track')
-#     def on_track(track):
-#         """
-#         Callback function for receiving track from client
-#         """
-#         logger.info('Received %s track', track.kind)
-#         if track.kind == 'video':
-#             global track_global
-#             track_global = track
-#             track_recv_event.set()
-#             # relay.subscribe(track)
-#
-#             # recorder_raw.addTrack(relay.subscribe(track))
-#             # recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), process_type, processor))
-#         else:
-#             # Not consider audio at this stage
-#             # recorder_raw.addTrack(track)  # add audio track to recorder_raw
-#             pass
-#
-#     # dummy channel
-#     dummy_channel = pc.createDataChannel('dummy')
-#
-#     # patch channel
-#     patch_channel = pc.createDataChannel('patch')
-#
-#     @patch_channel.on('open')
-#     def on_patch_channel_open():
-#         pass
-#
-#     i = 0
-#
-#     @patch_channel.on('message')
-#     def on_patch_channel_message(patch):
-#         nonlocal i
-#         patch: Patch = pickle.loads(patch)
-#         hr_bytes = patch.hr_patch
-#         lr_bytes = patch.lr_patch
-#         hr_array = bytes_to_ndarray(hr_bytes)
-#         lr_array = bytes_to_ndarray(lr_bytes)
-#         patch_queue.put((hr_array, lr_array))
-#         cv2.imwrite(f'data/360p/{i:04d}_lr.png', lr_array)
-#         cv2.imwrite(f'data/720p/{i:04d}_hr.png', hr_array)
-#         i += 1
-#
-#     @patch_channel.on('close')
-#     def on_patch_channel_close():
-#         logger.info('patch channel close')
-#
-#     await pc.setLocalDescription(await pc.createOffer())  # create SDP offer and set as local description
-#     await signaling.send(pc.localDescription)  # send local description to signal server
-#
-#     # consume signaling
-#     while True:
-#         obj = await signaling.receive()
-#
-#         if isinstance(obj, RTCSessionDescription):
-#             logger.info('Received remote description')
-#             await pc.setRemoteDescription(obj)
-#             # await recorder_raw.start()
-#             # await recorder_sr.start()
-#         elif isinstance(obj, RTCIceCandidate):
-#             logger.info('Received remote candidate')
-#             await pc.addIceCandidate(obj)
-#         elif obj is BYE:
-#             logger.info('Exiting')
-#             break
-
 
 async def comm_receiver(pc, signaling):
     def log_info(msg):
@@ -340,10 +260,10 @@ async def comm_receiver(pc, signaling):
     await signaling.connect()
     log_info('Signaling connected')
 
-    await track_recv_event.wait()
-    log_info('got track')
-
-    pc.addTrack(relay.subscribe(track_global))
+    track = await track_container.get_content()
+    pc.addTrack(relay.subscribe(track))  # work
+    # pc.addTrack(track)
+    log_info('Set track for receiver')
 
     # # dummy channel
     # dummy_channel = pc.createDataChannel('dummy')
@@ -442,7 +362,7 @@ if __name__ == '__main__':
     try:
         sender_coro = comm_sender(sender_pc, sender_signaling, patch_queue)
         receiver_coro = comm_receiver(receiver_pc, receiver_signaling)
-        loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))
+        loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))  #
 
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running server')
@@ -452,7 +372,7 @@ if __name__ == '__main__':
         loop.run_until_complete(receiver_signaling.close())
         logger.info('Signaling close')
 
-        loop.run_until_complete(sender_pc.close())  # pc closes then no track. though, recording can last long a little bit
+        loop.run_until_complete(sender_pc.close())  # pc closes then no track
         loop.run_until_complete(receiver_pc.close())
         logger.info('pc close')
 

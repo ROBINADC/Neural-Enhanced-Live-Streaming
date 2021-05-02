@@ -33,6 +33,11 @@ logger = logging.getLogger('Receiver')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
 
 
+class DummyProcessor:
+    def process(self, image: np.ndarray) -> np.ndarray:
+        return image
+
+
 class SuperResolutionProcessor:
     def __init__(self, args):
         self.model = SingleNetwork(args.model_scale, num_blocks=args.model_num_blocks,
@@ -78,14 +83,13 @@ class VideoProcessTrack(MediaStreamTrack):
 
     kind = 'video'
 
-    def __init__(self, track, process_type: str, processor=None):
+    def __init__(self, track, processor):
         """
         :param track: the original track to be processed
         :param process_type:
         """
         super().__init__()
         self.track = track
-        self.type = process_type
         self.processor = processor
 
         self.count = 0
@@ -99,40 +103,24 @@ class VideoProcessTrack(MediaStreamTrack):
         :return: frame
         """
         frame = await self.track.recv()  # read next frame from origin track
-        if self.type == 'sr':
-            img = frame.to_ndarray(format='bgr24')
-            img = self.processor.process(img)
+        img = frame.to_ndarray(format='bgr24')
+        img = self.processor.process(img)
 
-            self.count += 1
-            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
-            new_frame.pts = frame.pts  # Presentation TimeStamps, denominated in terms of timebase, here
-            new_frame.time_base = frame.time_base  # a unit of time, here Fraction(1, 90000) (of a second)
+        # rebuild a VideoFrame, preserving timing information
+        new_frame = VideoFrame.from_ndarray(img, format='bgr24')
+        new_frame.pts = frame.pts  # Presentation TimeStamps, denominated in terms of timebase, here
+        new_frame.time_base = frame.time_base  # a unit of time, here Fraction(1, 90000) (of a second)
 
-            return new_frame
-        elif self.type == 'grayish':
-            img = frame.to_ndarray(format='bgr24')  # (frame.height, frame.width, 3)
-
-            img[::2, ::2, :] = 128
-            img[1::2, 1::2, :] = 128
-
-            # rebuild a VideoFrame, preserving timing information
-            new_frame = VideoFrame.from_ndarray(img, format='bgr24')
-            new_frame.pts = frame.pts  # Presentation TimeStamps, denominated in terms of timebase, here
-            new_frame.time_base = frame.time_base  # a unit of time, here Fraction(1, 90000) (of a second)
-            # Multiply pts with time_base yields the playout time of a frame
-            return new_frame
-        elif self.type == 'none':
-            return frame
-        else:
-            raise NotImplementedError
+        return new_frame
 
 
-async def comm_server(pc, signaling, process_type, processor, recorder_raw, recorder_sr):
+async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
     @pc.on('track')
     def on_track(track):
         logger.info('Received track from server')
         if track.kind == 'video':
             recorder_raw.addTrack(relay.subscribe(track))
+            # recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), processor))
         else:
             # Not consider audio at this stage
             # recorder_raw.addTrack(track)  # add audio track to recorder_raw
@@ -170,6 +158,7 @@ async def comm_server(pc, signaling, process_type, processor, recorder_raw, reco
             logger.info('Received remote description')
             await pc.setRemoteDescription(obj)
             await recorder_raw.start()
+            # await recorder_sr.start()
 
             await pc.setLocalDescription(await pc.createAnswer())
             await signaling.send(pc.localDescription)
@@ -199,9 +188,9 @@ if __name__ == '__main__':
 
     # model
     parser.add_argument('--not-use-cuda', action='store_true')
-    parser.add_argument('--model-scale', type=int, default=3)
-    parser.add_argument('--model-num-blocks', type=int, default=8)
-    parser.add_argument('--model-num-features', type=int, default=8)
+    parser.add_argument('--model-scale', type=int, default=2)
+    parser.add_argument('--model-num-blocks', type=int, default=6)
+    parser.add_argument('--model-num-features', type=int, default=6)
 
     # inference
     parser.add_argument('--load-pretrained', action='store_true')
@@ -239,17 +228,25 @@ if __name__ == '__main__':
         recorder_sr = MediaBlackhole()
 
     # inference
-    processor = SuperResolutionProcessor(args)
+    processor = None
+    if args.process_type == 'sr':
+        processor = SuperResolutionProcessor(args)
+    elif args.process_type == 'none':
+        processor = DummyProcessor()
+    else:
+        logger.info(f'Process type "{args.process_type}" is not recognized. Exit.')
+        exit(0)
 
     # run receiver
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(comm_server(pc, signaling, args.process_type, processor, recorder_raw, recorder_sr))
+        loop.run_until_complete(comm_server(pc, signaling, processor, recorder_raw, recorder_sr))
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running receiver')
     finally:
         # cleanup
         # loop.run_until_complete(recorder_raw.stop_after_finish())
         loop.run_until_complete(signaling.close())
-        loop.run_until_complete(pc.close())
-        loop.run_until_complete(recorder_raw.stop_after_finish())
+        loop.run_until_complete(pc.close())  # pc closes then no track
+        loop.run_until_complete(recorder_raw.stop_after_finish())  # work
+        # loop.run_until_complete(recorder_sr.stop_after_finish())
