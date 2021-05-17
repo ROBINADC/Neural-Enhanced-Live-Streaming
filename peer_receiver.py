@@ -9,12 +9,14 @@ However, the distinction of sender peer and receiver peer should be merged somed
 
 __author__ = "Yihang Wu"
 
+from io import BytesIO
 import os
 import argparse
 import logging
 import random
 import pickle
 import asyncio
+import queue
 
 import numpy as np
 from av import VideoFrame
@@ -25,7 +27,7 @@ from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RT
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
 from media import MediaRelay, MediaRecorderDelta, MediaBlackhole
-from misc import get_resolution
+from misc import get_resolution, ClassLogger
 from model import SingleNetwork
 
 logger = logging.getLogger('Receiver')
@@ -37,13 +39,17 @@ class DummyProcessor:
         return image
 
 
-class SuperResolutionProcessor:
+class SuperResolutionProcessor(ClassLogger):
     def __init__(self, args):
+        super(SuperResolutionProcessor, self).__init__('receiver')
+
         self.model = SingleNetwork(args.model_scale, num_blocks=args.model_num_blocks,
                                    num_channels=3, num_features=args.model_num_features)
         self.load_pretrained = args.load_pretrained
         self.pretrained_fp = args.pretrained_fp
         self.device = 'cuda' if not args.not_use_cuda else 'cpu'
+
+        self._model_queue = queue.SimpleQueue()
 
         self._setup()
 
@@ -51,12 +57,14 @@ class SuperResolutionProcessor:
         self.model = self.model.half().to(self.device)
         if self.load_pretrained and os.path.exists(self.pretrained_fp):
             self.model.load_state_dict(torch.load(self.pretrained_fp))
-            self.__log_info('load pretrained model')
+            self.log_info('load pretrained model')
         self.model.eval()
         torch.set_grad_enabled(False)
-        self.__log_info('finish setup')
+        self.log_info('finish setup')
 
     def process(self, image: np.ndarray) -> np.ndarray:
+        self.update_model()
+
         x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3)
         x = x.permute(2, 0, 1).half()  # (3, lr_height, lr_width)
         x.div_(255)
@@ -71,9 +79,19 @@ class SuperResolutionProcessor:
         hr_image = out.cpu().numpy()
         return hr_image
 
-    def __log_info(self, msg):
-        logger.info(f'[SuperResolutionProcessor] {msg}')
+    def update_model(self):
+        if self._model_queue.qsize() == 0:
+            return
 
+        m = self._model_queue.get_nowait()
+        while self._model_queue.qsize() > 0:
+            m = self._model_queue.get_nowait()
+        self.model.load_state_dict(torch.load(BytesIO(m)))
+        self.log_info('update model')
+
+    @property
+    def model_queue(self):
+        return self._model_queue
 
 class VideoProcessTrack(MediaStreamTrack):
     """
@@ -129,9 +147,10 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
         logger.info('Received data channel: %s', channel.label)
 
         if channel.label == 'model':
+
             @channel.on('message')
             def on_message(msg):
-                logger.info(f'receive msg')
+                processor.model_queue.put(msg)
         elif channel.label == 'dummy':
             @channel.on('message')
             def on_message(msg):
@@ -247,4 +266,3 @@ if __name__ == '__main__':
         loop.run_until_complete(recorder_sr.stop())
         loop.run_until_complete(signaling.close())
         loop.run_until_complete(pc.close())  # pc closes then no track
-

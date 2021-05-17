@@ -231,7 +231,7 @@ class OnlineTrainer(ClassLogger):
         self.model.train()
 
         for iteration, (x, y) in enumerate(self.dataloader):
-            time.sleep(0.01)  # ?? yield the gpu so that inference can use it
+            # time.sleep(0.01)  # ?? yield the gpu so that inference can use it
             x, y = x.to(self.device), y.to(self.device)  # (*, 3, patch_height, patch_width)
 
             self.optimizer.zero_grad()
