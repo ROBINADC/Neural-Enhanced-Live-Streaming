@@ -36,7 +36,11 @@ relay = MediaRelay()  # a media source that relays one or more tracks to multipl
 
 
 class ModelTransmitter(ClassLogger):
-    def __init__(self, mp_model_queue):
+    """
+    Send the model (represented in bytes) in the specified queue to given data channel.
+    """
+
+    def __init__(self, mp_model_queue: mp.Queue):
         super().__init__('server')
 
         self._mp_queue = mp_model_queue
@@ -48,15 +52,21 @@ class ModelTransmitter(ClassLogger):
         threading.Thread(target=self._fetching_model).start()
 
     async def _run(self):
+        """
+        Continuously sending bytes model through data channel
+        """
         while True:
             try:
-                m = await self._async_queue.get()
+                m: bytes = await self._async_queue.get()
                 self._model_channel.send(m)
             except asyncio.CancelledError:
                 self.log_info('cancel task for sending models')
                 return
 
     def start(self):
+        """
+        Start transmitting bytes models through data channel
+        """
         if not isinstance(self._model_channel, RTCDataChannel):
             raise TypeError
         self._task = asyncio.create_task(self._run())
@@ -66,13 +76,16 @@ class ModelTransmitter(ClassLogger):
             self._task.cancel()
 
     def _fetching_model(self):
+        """
+        Continuously fetching bytes model from multiprocessing queue to asyncio queue
+        """
         while True:
             try:
                 self._async_queue.put_nowait(self._mp_queue.get())
                 self.log_debug(f'put model to async queue. Current queue size: {self._async_queue.qsize()}')
             except (KeyboardInterrupt, SystemExit, EOFError) as exc:
                 self.log_info(f'thread(_fetching_model) terminates with exception {type(exc).__name__}')
-                return
+                break
 
     @property
     def model_channel(self) -> RTCDataChannel:
@@ -83,9 +96,9 @@ class ModelTransmitter(ClassLogger):
         self._model_channel = channel
 
 
-class TrackScheduler:
+class TrackScheduler(ClassLogger):
     """
-    Track scheduler is used in server to schedule a track.
+    Track scheduler is used in the server to schedule a track.
 
     - invoke set_track when track is ready
     - async call to get_track will return the internal track
@@ -94,6 +107,8 @@ class TrackScheduler:
     """
 
     def __init__(self):
+        super().__init__('server')
+
         self._event = asyncio.Event()
         self._track = None
         self._signal = False
@@ -112,7 +127,7 @@ class TrackScheduler:
             try:
                 await self._track.recv()
             except MediaStreamError:
-                # TODO show msg
+                self.log_debug('stop consuming due to MediaStreamError')
                 return
 
     def stop_consuming(self):
@@ -129,13 +144,17 @@ def run_trainer(patch_queue, model_queue, args):
     trainer.run()
 
 
-class OnlineTrainer:
+class OnlineTrainer(ClassLogger):
     def __init__(self, patch_queue, model_queue, args):
+        super().__init__('server')
+
         self.patch_queue = patch_queue
         self.model_queue = model_queue
 
         self.model = SingleNetwork(args.model_scale, num_blocks=args.model_num_blocks,
                                    num_channels=3, num_features=args.model_num_features)
+        self.load_pretrained = args.load_pretrained
+        self.pretrained_fp = args.pretrained_fp
 
         self.duration_per_epoch = args.duration_per_epoch
         self.batch_size = args.batch_size
@@ -153,8 +172,6 @@ class OnlineTrainer:
         self.save_ckpt = args.save_ckpt
         self.ckpt_dir = args.ckpt_dir
 
-        self.logger = logging.getLogger('server')
-
         self.epoch = 0
         self.pending_patches = []
 
@@ -162,9 +179,12 @@ class OnlineTrainer:
 
     def _setup(self):
         self.model.to(self.device)
-        self.model.load_state_dict(torch.load('data/pretrained/epoch_20.pt'))  # TODO load pretrained before train
+        if self.load_pretrained and os.path.exists(self.pretrained_fp):
+            self.model.load_state_dict(torch.load(self.pretrained_fp))
+            self.log_info('load pretrained model')
+        self.model.train()
 
-        self.__log_info('finish setup')
+        self.log_info('finish setup')
 
     def run(self):
         fetch_thread = threading.Thread(target=self._fetching_patch)
@@ -174,10 +194,10 @@ class OnlineTrainer:
             while not self.pending_patches:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.__log_info('interrupt while waiting the first batch of training patches')
+            self.log_info('interrupt while waiting the first batch of training patches')
             return
 
-        self.__log_debug('got pending patches')
+        self.log_debug('got pending patches')
 
         try:
             while True:
@@ -185,22 +205,22 @@ class OnlineTrainer:
 
                 self.extend_dataset()
                 self.train_one_epoch()
-                self.save_model()
+                self.on_model_ready()
 
                 if self.duration_per_epoch is not None:
                     elapse = time.time() - epoch_start_time
                     if elapse < self.duration_per_epoch:
-                        self.__log_debug(f'current epoch duration {elapse:.2f}')
+                        self.log_debug(f'current epoch duration {elapse:.2f}')
                         time.sleep(self.duration_per_epoch - elapse)
                     else:
-                        self.__log_warning(f'current epoch duration {elapse:.2f} is greater than {self.duration_per_epoch}')
+                        self.log_warning(f'current epoch duration {elapse:.2f} is greater than {self.duration_per_epoch}')
         except KeyboardInterrupt:
-            self.__log_info('keyboard interrupt training')
+            self.log_info('keyboard interrupt training')
         # fetch_thread.join()
 
     def extend_dataset(self):
         size = len(self.pending_patches)
-        self.__log_debug(f'extend {size} patches')
+        self.log_debug(f'extend {size} patches')
         if size == 0:
             return
 
@@ -220,17 +240,20 @@ class OnlineTrainer:
             self.optimizer.step()
 
             if iteration % 10 == 0:
-                self.__log_debug(f'{iteration} {loss.item()}')
+                self.log_debug(f'{iteration} {loss.item()}')
 
         self.epoch += 1
-        self.__log_info(f'finish training epoch {self.epoch}')
+        self.log_info(f'finish training epoch {self.epoch}')
 
-    def validate(self):
-        pass
+    def on_model_ready(self):
+        # convert the trained model to bytes and put it to model_queue
+        buffer = io.BytesIO()
+        torch.save(self.model.state_dict(), buffer)
+        buffer.seek(0)
+        self.model_queue.put(buffer.read())  # model in bytes
+        self.log_debug(f'put a bytes model to mp queue')
 
-    def save_model(self):
-        # on model ready
-
+        # optionally save the model to local file
         if self.save_ckpt:
             fn = os.path.join(self.ckpt_dir, f'epoch_{self.epoch}.pt')
             torch.save(self.model.state_dict(), fn)
@@ -238,12 +261,8 @@ class OnlineTrainer:
             if os.path.exists(old_fn):
                 os.remove(old_fn)
 
-        # put the trained model to model queue
-        buffer = io.BytesIO()
-        torch.save(self.model.state_dict(), buffer)
-        buffer.seek(0)
-        self.model_queue.put(buffer.read())  # model in bytes
-        self.__log_debug(f'put a model to mp queue')
+    def validate(self):
+        pass
 
     def _fetching_patch(self):
         while True:
@@ -263,15 +282,6 @@ class OnlineTrainer:
             return nn.MSELoss()
         else:
             raise NotImplementedError
-
-    def __log_warning(self, msg):
-        self.logger.warning(f'[OnlineTrainer] {msg}')
-
-    def __log_info(self, msg):
-        self.logger.info(f'[OnlineTrainer] {msg}')
-
-    def __log_debug(self, msg):
-        self.logger.debug(f'[OnlineTrainer] {msg}')
 
 
 async def comm_sender(pc, signaling, patch_queue, track_scheduler):
@@ -426,6 +436,8 @@ if __name__ == '__main__':
     parser.add_argument('--bias-weight', type=int, default=4)
     parser.add_argument("--loss-type", type=str, default='l1', choices=('l1', 'l2'))
     parser.add_argument('--learning-rate', type=float, default=1e-4)
+    parser.add_argument('--load-pretrained', action='store_true')
+    parser.add_argument('--pretrained-fp', type=str)
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
@@ -469,7 +481,7 @@ if __name__ == '__main__':
         # cleanup
         loop.run_until_complete(sender_signaling.close())
         loop.run_until_complete(receiver_signaling.close())
-        logger.info('Signaling close')
+        logger.info('signaling close')
 
         loop.run_until_complete(sender_pc.close())  # pc closes then no track
         loop.run_until_complete(receiver_pc.close())
