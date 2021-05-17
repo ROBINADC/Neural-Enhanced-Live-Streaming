@@ -19,28 +19,6 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
-class AsyncContainer:
-    def __init__(self):
-        self._event = asyncio.Event()
-        self._content = None
-        self._signal = False
-
-    def set_content(self, content):
-        self._content = content
-        self._event.set()
-
-    async def get_content(self):
-        await self._event.wait()
-        return self._content
-
-    async def start(self):
-        while not self._signal:
-            await self._content.recv()
-
-    def stop(self):
-        self._signal = True
-
-
 class MostRecentSlot:
     def __init__(self):
         self._queue = asyncio.Queue(maxsize=1)

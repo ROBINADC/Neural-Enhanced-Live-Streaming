@@ -27,11 +27,42 @@ from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import AsyncContainer, Patch, bytes_to_ndarray
+from misc import Patch, bytes_to_ndarray
 
 logger = logging.getLogger('server')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
-track_container = AsyncContainer()
+
+
+class TrackScheduler:
+    """
+    Track scheduler is used in server to schedule a track.
+
+    - invoke set_track when track is ready
+    - async call to get_track will return the internal track
+    - async call to start_consuming will consume frames from the head of the track
+    - invoke stop_consuming to stop consuming frames
+    """
+
+    def __init__(self):
+        self._event = asyncio.Event()
+        self._track = None
+        self._signal = False
+
+    def set_track(self, track):
+        self._track = track
+        self._event.set()
+
+    async def get_track(self):
+        await self._event.wait()
+        return self._track
+
+    async def start_consuming(self):
+        await self._event.wait()
+        while not self._signal:
+            await self._track.recv()
+
+    def stop_consuming(self):
+        self._signal = True
 
 
 def run_trainer(patch_queue, args):
@@ -179,7 +210,7 @@ class OnlineTrainer:
         self.logger.debug(f'[OnlineTrainer] {msg}')
 
 
-async def comm_sender(pc, signaling, patch_queue):
+async def comm_sender(pc, signaling, patch_queue, track_scheduler):
     """
     Communicates with sender
     """
@@ -200,9 +231,9 @@ async def comm_sender(pc, signaling, patch_queue):
         """
         log_info(f'Received {track.kind} track')
         if track.kind == 'video':
-            track_container.set_content(relay.subscribe(track))  # track not works
+            track_scheduler.set_track(relay.subscribe(track))  # track not works
             log_info('Got track from sender')
-            asyncio.create_task(track_container.start())   # start consuming frames
+            asyncio.create_task(track_scheduler.start_consuming())  # start consuming frames
         else:
             # Not consider audio at this stage
             pass
@@ -254,18 +285,17 @@ async def comm_sender(pc, signaling, patch_queue):
             break
 
 
-async def comm_receiver(pc, signaling):
+async def comm_receiver(pc, signaling, track_scheduler):
     def log_info(msg):
         logger.info(f'@Receiver {msg}')
 
     await signaling.connect()
     log_info('Signaling connected')
 
-    track = await track_container.get_content()
-    # track_container.stop()  # stop consuming
+    track = await track_scheduler.get_track()
 
-    # pc.addTrack(relay.subscribe(track))  # work
-    pc.addTrack(track)  # not work
+    pc.addTrack(track)  # work
+    # pc.addTrack(relay.subscribe(track))
     log_info('Set track for receiver')
 
     # # dummy channel
@@ -294,7 +324,7 @@ async def comm_receiver(pc, signaling):
         if isinstance(obj, RTCSessionDescription):
             log_info('Received remote description')
             await pc.setRemoteDescription(obj)
-            track_container.stop()  # stop consuming
+            track_scheduler.stop_consuming()  # stop consuming frames
         elif isinstance(obj, RTCIceCandidate):
             log_info('Received remote candidate')
             await pc.addIceCandidate(obj)
@@ -361,12 +391,15 @@ if __name__ == '__main__':
     receiver_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_receiver)
     receiver_pc = RTCPeerConnection()
 
+    # track scheduler
+    track_scheduler = TrackScheduler()
+
     # run server - connects sender and receiver
     loop = asyncio.get_event_loop()
     try:
-        sender_coro = comm_sender(sender_pc, sender_signaling, patch_queue)
-        receiver_coro = comm_receiver(receiver_pc, receiver_signaling)
-        loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))  #
+        sender_coro = comm_sender(sender_pc, sender_signaling, patch_queue, track_scheduler)
+        receiver_coro = comm_receiver(receiver_pc, receiver_signaling, track_scheduler)
+        loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))
 
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running server')
