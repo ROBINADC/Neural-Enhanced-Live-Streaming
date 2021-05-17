@@ -4,6 +4,7 @@ Video conferencing server
 
 __author__ = "Yihang Wu"
 
+import io
 import os
 import argparse
 import logging
@@ -21,16 +22,65 @@ import torch.optim as optim
 from torch.utils.data.dataloader import DataLoader
 import torch.multiprocessing as mp
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc.mediastreams import MediaStreamError
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 
 from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import Patch, bytes_to_ndarray
+from misc import Patch, bytes_to_ndarray, ClassLogger
 
 logger = logging.getLogger('server')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
+
+
+class ModelTransmitter(ClassLogger):
+    def __init__(self, mp_model_queue):
+        super().__init__('server')
+
+        self._mp_queue = mp_model_queue
+
+        self._async_queue = asyncio.Queue()
+        self._model_channel = None
+        self._task = None
+
+        threading.Thread(target=self._fetching_model).start()
+
+    async def _run(self):
+        while True:
+            try:
+                m = await self._async_queue.get()
+                self._model_channel.send(m)
+            except asyncio.CancelledError:
+                self.log_info('cancel task for sending models')
+                return
+
+    def start(self):
+        if not isinstance(self._model_channel, RTCDataChannel):
+            raise TypeError
+        self._task = asyncio.create_task(self._run())
+
+    def stop(self):
+        if self._task is not None:
+            self._task.cancel()
+
+    def _fetching_model(self):
+        while True:
+            try:
+                self._async_queue.put_nowait(self._mp_queue.get())
+                self.log_debug(f'put model to async queue. Current queue size: {self._async_queue.qsize()}')
+            except (KeyboardInterrupt, SystemExit, EOFError) as exc:
+                self.log_info(f'thread(_fetching_model) terminates with exception {type(exc).__name__}')
+                return
+
+    @property
+    def model_channel(self) -> RTCDataChannel:
+        return self._model_channel
+
+    @model_channel.setter
+    def model_channel(self, channel: RTCDataChannel):
+        self._model_channel = channel
 
 
 class TrackScheduler:
@@ -59,25 +109,30 @@ class TrackScheduler:
     async def start_consuming(self):
         await self._event.wait()
         while not self._signal:
-            await self._track.recv()
+            try:
+                await self._track.recv()
+            except MediaStreamError:
+                # TODO show msg
+                return
 
     def stop_consuming(self):
         self._signal = True
 
 
-def run_trainer(patch_queue, args):
+def run_trainer(patch_queue, model_queue, args):
     """
     This function is run in another process.
     """
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)  # setup logging
 
-    trainer = OnlineTrainer(patch_queue, args)
+    trainer = OnlineTrainer(patch_queue, model_queue, args)
     trainer.run()
 
 
 class OnlineTrainer:
-    def __init__(self, patch_queue, args):
+    def __init__(self, patch_queue, model_queue, args):
         self.patch_queue = patch_queue
+        self.model_queue = model_queue
 
         self.model = SingleNetwork(args.model_scale, num_blocks=args.model_num_blocks,
                                    num_channels=3, num_features=args.model_num_features)
@@ -174,12 +229,21 @@ class OnlineTrainer:
         pass
 
     def save_model(self):
+        # on model ready
+
         if self.save_ckpt:
             fn = os.path.join(self.ckpt_dir, f'epoch_{self.epoch}.pt')
             torch.save(self.model.state_dict(), fn)
             old_fn = os.path.join(self.ckpt_dir, f'epoch_{self.epoch - 5}.pt')
             if os.path.exists(old_fn):
                 os.remove(old_fn)
+
+        # put the trained model to model queue
+        buffer = io.BytesIO()
+        torch.save(self.model.state_dict(), buffer)
+        buffer.seek(0)
+        self.model_queue.put(buffer.read())  # model in bytes
+        self.__log_debug(f'put a model to mp queue')
 
     def _fetching_patch(self):
         while True:
@@ -238,9 +302,6 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
             # Not consider audio at this stage
             pass
 
-    # dummy channel
-    dummy_channel = pc.createDataChannel('dummy')
-
     # patch channel
     patch_channel = pc.createDataChannel('patch')
 
@@ -285,7 +346,7 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
             break
 
 
-async def comm_receiver(pc, signaling, track_scheduler):
+async def comm_receiver(pc, signaling, model_queue, track_scheduler):
     def log_info(msg):
         logger.info(f'@Receiver {msg}')
 
@@ -298,21 +359,21 @@ async def comm_receiver(pc, signaling, track_scheduler):
     # pc.addTrack(relay.subscribe(track))
     log_info('Set track for receiver')
 
-    # # dummy channel
-    # dummy_channel = pc.createDataChannel('dummy')
-    #
-    # @dummy_channel.on('open')
-    # def on_dummy_channel_open():
-    #     dummy_channel.send('I am server')
-    #
-    # @dummy_channel.on('message')
-    # def on_dummy_channel_message(msg):
-    #     # log_info(f'received {msg}')
-    #     dummy_channel.send('I am server')
-    #
-    # @dummy_channel.on('close')
-    # def on_dummy_channel_close():
-    #     log_info('dummy channel close')
+    # model channel
+    model_transmitter = ModelTransmitter(model_queue)
+
+    model_channel = pc.createDataChannel('model')
+    model_transmitter.model_channel = model_channel
+
+    @model_channel.on('open')
+    def on_model_channel_open():
+        log_info('model channel open')
+        model_transmitter.start()
+
+    @model_channel.on('close')
+    def on_model_channel_close():
+        model_transmitter.stop()
+        log_info('model channel close')
 
     await pc.setLocalDescription(await pc.createOffer())  # create SDP offer and set as local description
     await signaling.send(pc.localDescription)  # send local description to signal server
@@ -382,8 +443,12 @@ if __name__ == '__main__':
     # train at another process
     mp.set_start_method('spawn', force=True)
     patch_queue = mp.Queue()
-    train_process = mp.Process(target=run_trainer, args=(patch_queue, args))
+    model_queue = mp.Queue()
+    train_process = mp.Process(target=run_trainer, args=(patch_queue, model_queue, args))
     train_process.start()
+
+    # track scheduler
+    track_scheduler = TrackScheduler()
 
     # RTC
     sender_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_sender)
@@ -391,14 +456,11 @@ if __name__ == '__main__':
     receiver_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_receiver)
     receiver_pc = RTCPeerConnection()
 
-    # track scheduler
-    track_scheduler = TrackScheduler()
-
     # run server - connects sender and receiver
     loop = asyncio.get_event_loop()
     try:
         sender_coro = comm_sender(sender_pc, sender_signaling, patch_queue, track_scheduler)
-        receiver_coro = comm_receiver(receiver_pc, receiver_signaling, track_scheduler)
+        receiver_coro = comm_receiver(receiver_pc, receiver_signaling, model_queue, track_scheduler)
         loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))
 
     except KeyboardInterrupt:
@@ -414,4 +476,5 @@ if __name__ == '__main__':
         logger.info('pc close')
 
     patch_queue.close()
+    model_queue.close()
     train_process.terminate()
