@@ -710,6 +710,9 @@ class MediaRecorderDelta:
                 self._container.close()
                 self._container = None
 
+        self._log.close()
+        logger.info(f'MediaRecorder totally received {self._count} frames')
+
     async def stop_after_finish(self):
         if self._container:
             for _, context in self._tracks.items():
