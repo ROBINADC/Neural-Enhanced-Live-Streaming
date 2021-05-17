@@ -16,7 +16,20 @@ import cv2
 import numpy as np
 import asyncio
 
-logger = logging.getLogger(__name__)
+
+class ClassLogger:
+    def __init__(self, name):
+        self._logger = logging.getLogger(name)
+        self._cls = self.__class__.__name__
+
+    def log_debug(self, msg, *args):
+        self._logger.debug(f'[{self._cls}] {msg}', *args)
+
+    def log_info(self, msg, *args):
+        self._logger.info(f'[{self._cls}] {msg}', *args)
+
+    def log_warning(self, msg, *args):
+        self._logger.warning(f'[{self._cls}] {msg}', *args)
 
 
 class MostRecentSlot:
