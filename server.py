@@ -4,7 +4,7 @@ Video conferencing server
 
 __author__ = "Yihang Wu"
 
-import io
+from io import BytesIO
 import os
 import argparse
 import logging
@@ -179,7 +179,7 @@ class OnlineTrainer(ClassLogger):
 
     def _setup(self):
         self.model.to(self.device)
-        if self.load_pretrained and os.path.exists(self.pretrained_fp):
+        if self.load_pretrained and self.pretrained_fp and os.path.exists(self.pretrained_fp):
             self.model.load_state_dict(torch.load(self.pretrained_fp))
             self.log_info('load pretrained model')
         self.model.train()
@@ -247,7 +247,7 @@ class OnlineTrainer(ClassLogger):
 
     def on_model_ready(self):
         # convert the trained model to bytes and put it to model_queue
-        buffer = io.BytesIO()
+        buffer = BytesIO()
         torch.save(self.model.state_dict(), buffer)
         buffer.seek(0)
         self.model_queue.put(buffer.read())  # model in bytes

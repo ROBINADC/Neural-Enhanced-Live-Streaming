@@ -13,14 +13,12 @@ from io import BytesIO
 import os
 import argparse
 import logging
-import random
-import pickle
 import asyncio
 import queue
 
 import numpy as np
 from av import VideoFrame
-import cv2
+# import cv2
 import torch
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack
@@ -63,7 +61,9 @@ class SuperResolutionProcessor(ClassLogger):
         self.log_info('finish setup')
 
     def process(self, image: np.ndarray) -> np.ndarray:
-        self.update_model()
+        # before processing a frame, check whether the model can be updated
+        # current implementation checks at every frame, which can be refined later
+        self._update_model()
 
         x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3)
         x = x.permute(2, 0, 1).half()  # (3, lr_height, lr_width)
@@ -79,7 +79,11 @@ class SuperResolutionProcessor(ClassLogger):
         hr_image = out.cpu().numpy()
         return hr_image
 
-    def update_model(self):
+    def _update_model(self):
+        """
+        Update the model using the newest model in queue.
+        This method is invoked in method process
+        """
         if self._model_queue.qsize() == 0:
             return
 
@@ -92,6 +96,7 @@ class SuperResolutionProcessor(ClassLogger):
     @property
     def model_queue(self):
         return self._model_queue
+
 
 class VideoProcessTrack(MediaStreamTrack):
     """
@@ -109,9 +114,6 @@ class VideoProcessTrack(MediaStreamTrack):
         self.processor = processor
 
         self.count = 0
-
-        # self.timer = Timer()
-        # self.timer.start()
 
     async def recv(self):
         """
@@ -147,15 +149,9 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
         logger.info('Received data channel: %s', channel.label)
 
         if channel.label == 'model':
-
             @channel.on('message')
             def on_message(msg):
                 processor.model_queue.put(msg)
-        elif channel.label == 'dummy':
-            @channel.on('message')
-            def on_message(msg):
-                # logger.info(f'received {msg}')
-                channel.send('I am receiver')
         else:
             raise NotImplementedError
 
