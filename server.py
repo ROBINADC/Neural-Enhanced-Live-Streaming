@@ -40,8 +40,8 @@ def run_trainer(patch_queue, args):
     """
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)  # setup logging
 
-    # trainer = OnlineTrainer(patch_queue, args)
-    # trainer.run()
+    trainer = OnlineTrainer(patch_queue, args)
+    trainer.run()
 
 
 class OnlineTrainer:
