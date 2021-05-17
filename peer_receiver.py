@@ -128,10 +128,10 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
     def on_datachannel(channel: RTCDataChannel):
         logger.info('Received data channel: %s', channel.label)
 
-        if channel.label == 'patch':
-            # worker.patch_channel = channel
-            # worker.start()
-            pass
+        if channel.label == 'model':
+            @channel.on('message')
+            def on_message(msg):
+                logger.info(f'receive msg')
         elif channel.label == 'dummy':
             @channel.on('message')
             def on_message(msg):
