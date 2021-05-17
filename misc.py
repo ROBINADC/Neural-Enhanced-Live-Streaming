@@ -23,6 +23,7 @@ class AsyncContainer:
     def __init__(self):
         self._event = asyncio.Event()
         self._content = None
+        self._signal = False
 
     def set_content(self, content):
         self._content = content
@@ -31,6 +32,13 @@ class AsyncContainer:
     async def get_content(self):
         await self._event.wait()
         return self._content
+
+    async def start(self):
+        while not self._signal:
+            await self._content.recv()
+
+    def stop(self):
+        self._signal = True
 
 
 class MostRecentSlot:

@@ -202,6 +202,7 @@ async def comm_sender(pc, signaling, patch_queue):
         if track.kind == 'video':
             track_container.set_content(relay.subscribe(track))  # track not works
             log_info('Got track from sender')
+            asyncio.create_task(track_container.start())   # start consuming frames
         else:
             # Not consider audio at this stage
             pass
@@ -261,9 +262,10 @@ async def comm_receiver(pc, signaling):
     log_info('Signaling connected')
 
     track = await track_container.get_content()
+    # track_container.stop()  # stop consuming
 
-    pc.addTrack(relay.subscribe(track))  # work
-    # pc.addTrack(track)  # not work
+    # pc.addTrack(relay.subscribe(track))  # work
+    pc.addTrack(track)  # not work
     log_info('Set track for receiver')
 
     # # dummy channel
@@ -292,6 +294,7 @@ async def comm_receiver(pc, signaling):
         if isinstance(obj, RTCSessionDescription):
             log_info('Received remote description')
             await pc.setRemoteDescription(obj)
+            track_container.stop()  # stop consuming
         elif isinstance(obj, RTCIceCandidate):
             log_info('Received remote candidate')
             await pc.addIceCandidate(obj)
