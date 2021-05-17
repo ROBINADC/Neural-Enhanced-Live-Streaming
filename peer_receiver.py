@@ -14,7 +14,6 @@ import argparse
 import logging
 import random
 import pickle
-import platform
 import asyncio
 
 import numpy as np
@@ -25,8 +24,8 @@ import torch
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
-from media import MediaPlayer, MediaRelay, MediaPlayerDelta, MediaRecorderDelta, MediaBlackhole
-from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution
+from media import MediaRelay, MediaRecorderDelta, MediaBlackhole
+from misc import get_resolution
 from model import SingleNetwork
 
 logger = logging.getLogger('Receiver')
@@ -54,7 +53,7 @@ class SuperResolutionProcessor:
             self.model.load_state_dict(torch.load(self.pretrained_fp))
             self.__log_info('load pretrained model')
         self.model.eval()
-        torch.set_grad_enabled(False)  # affect other part ?
+        torch.set_grad_enabled(False)
         self.__log_info('finish setup')
 
     def process(self, image: np.ndarray) -> np.ndarray:
@@ -86,7 +85,6 @@ class VideoProcessTrack(MediaStreamTrack):
     def __init__(self, track, processor):
         """
         :param track: the original track to be processed
-        :param process_type:
         """
         super().__init__()
         self.track = track
@@ -120,7 +118,7 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
         logger.info('Received track from server')
         if track.kind == 'video':
             recorder_raw.addTrack(relay.subscribe(track))
-            # recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), processor))
+            recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), processor))
         else:
             # Not consider audio at this stage
             # recorder_raw.addTrack(track)  # add audio track to recorder_raw
@@ -158,7 +156,7 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
             logger.info('Received remote description')
             await pc.setRemoteDescription(obj)
             await recorder_raw.start()
-            # await recorder_sr.start()
+            await recorder_sr.start()
 
             await pc.setLocalDescription(await pc.createAnswer())
             await signaling.send(pc.localDescription)
@@ -245,8 +243,7 @@ if __name__ == '__main__':
         logger.info('keyboard interrupt while running receiver')
     finally:
         # cleanup
-        # loop.run_until_complete(recorder_raw.stop_after_finish())
         loop.run_until_complete(signaling.close())
         loop.run_until_complete(pc.close())  # pc closes then no track
         loop.run_until_complete(recorder_raw.stop_after_finish())  # work
-        # loop.run_until_complete(recorder_sr.stop_after_finish())
+        loop.run_until_complete(recorder_sr.stop_after_finish())

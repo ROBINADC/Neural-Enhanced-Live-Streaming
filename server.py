@@ -40,8 +40,8 @@ def run_trainer(patch_queue, args):
     """
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)  # setup logging
 
-    trainer = OnlineTrainer(patch_queue, args)
-    trainer.run()
+    # trainer = OnlineTrainer(patch_queue, args)
+    # trainer.run()
 
 
 class OnlineTrainer:
@@ -200,7 +200,7 @@ async def comm_sender(pc, signaling, patch_queue):
         """
         log_info(f'Received {track.kind} track')
         if track.kind == 'video':
-            track_container.set_content(track)
+            track_container.set_content(relay.subscribe(track))  # track not works
             log_info('Got track from sender')
         else:
             # Not consider audio at this stage
@@ -261,8 +261,9 @@ async def comm_receiver(pc, signaling):
     log_info('Signaling connected')
 
     track = await track_container.get_content()
+
     pc.addTrack(relay.subscribe(track))  # work
-    # pc.addTrack(track)
+    # pc.addTrack(track)  # not work
     log_info('Set track for receiver')
 
     # # dummy channel
