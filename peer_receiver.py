@@ -243,7 +243,8 @@ if __name__ == '__main__':
         logger.info('keyboard interrupt while running receiver')
     finally:
         # cleanup
+        loop.run_until_complete(recorder_raw.stop_after_finish())  # work ?
+        loop.run_until_complete(recorder_sr.stop_after_finish())
         loop.run_until_complete(signaling.close())
         loop.run_until_complete(pc.close())  # pc closes then no track
-        loop.run_until_complete(recorder_raw.stop_after_finish())  # work
-        loop.run_until_complete(recorder_sr.stop_after_finish())
+
