@@ -144,5 +144,15 @@ class Timer:
         return timedelta(seconds=int(self._stop_time - self._start_time))
 
 
+def ffmpeg_run():
+    """
+    Handy function for using python bindings for FFmpeg
+
+    References: https://kkroening.github.io/ffmpeg-python/
+    """
+    import ffmpeg
+    ffmpeg.input('.mp4').trim(start=0, end=3).filter('fps', fps=5, round='up').output('out.mp4').run()
+
+
 if __name__ == '__main__':
     pass
