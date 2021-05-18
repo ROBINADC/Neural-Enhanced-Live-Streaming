@@ -28,7 +28,7 @@ from media import MediaRelay, MediaRecorderDelta, MediaBlackhole
 from misc import get_resolution, ClassLogger
 from model import SingleNetwork
 
-logger = logging.getLogger('Receiver')
+logger = logging.getLogger('receiver')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
 
 
@@ -53,9 +53,12 @@ class SuperResolutionProcessor(ClassLogger):
 
     def _setup(self):
         self.model = self.model.half().to(self.device)
-        if self.load_pretrained and os.path.exists(self.pretrained_fp):
+
+        # using pretrained model at receiver side is trivial (as it is replaced by new model in short time)
+        if self.load_pretrained and self.pretrained_fp and os.path.exists(self.pretrained_fp):
             self.model.load_state_dict(torch.load(self.pretrained_fp))
-            self.log_info('load pretrained model')
+            self.log_info('load pretrained model (NOT RECOMMAND)')
+
         self.model.eval()
         torch.set_grad_enabled(False)
         self.log_info('finish setup')
@@ -95,6 +98,13 @@ class SuperResolutionProcessor(ClassLogger):
 
     @property
     def model_queue(self):
+        """
+        A SimpleQueue object for placing newly trained models.
+        The model in the queue should be saved by torch.save(), and represented in bytes beforehand.
+        Models are loaded by torch.load(BytesIO(m)) in this class.
+
+        Returns: queue for models
+        """
         return self._model_queue
 
 
@@ -193,8 +203,8 @@ if __name__ == '__main__':
     parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
     parser.add_argument('--record-sr-fn', type=str, default='sr.mp4', help='SR video record name')
     parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
-    parser.add_argument('--not-record-sr', action='store_true')
-    parser.add_argument('--not-record-raw', action='store_true')
+    parser.add_argument('--not-record-sr', action='store_true', help='Do not record SR video')
+    parser.add_argument('--not-record-raw', action='store_true', help='Do not record raw video')
     parser.add_argument('--hr-height', type=int, default=720, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=360, help='Height of transformed low-resolution video')
     parser.add_argument('--fps', type=int, default=5)
@@ -206,8 +216,8 @@ if __name__ == '__main__':
     parser.add_argument('--model-num-features', type=int, default=6)
 
     # inference
-    parser.add_argument('--load-pretrained', action='store_true')
-    parser.add_argument('--pretrained-fp', type=str)
+    parser.add_argument('--load-pretrained', action='store_true', help='Load pretrained model for super-resolution (NOT RECOMMAND)')
+    parser.add_argument('--pretrained-fp', type=str, help='File path to the pretrained model')
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
