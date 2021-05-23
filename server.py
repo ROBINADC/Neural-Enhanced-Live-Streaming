@@ -159,7 +159,7 @@ class OnlineTrainer(ClassLogger):
         self.duration_per_epoch = args.duration_per_epoch
         self.batch_size = args.batch_size
         self.learning_rate = args.learning_rate
-        self.device = 'cuda' if not args.not_use_cuda else 'cpu'
+        self.device = 'cuda' if args.use_gpu else 'cpu'
 
         self.dataset = RecentBiasDataset(num_items_per_epoch=args.num_items_per_epoch,
                                          num_biased_samples=args.num_biased_samples,
@@ -421,7 +421,7 @@ if __name__ == '__main__':
     # parser.add_argument('--fps', type=int, default=5)
 
     # model
-    parser.add_argument('--not-use-cuda', action='store_true')
+    parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--model-scale', type=int, default=2)
     parser.add_argument('--model-num-blocks', type=int, default=6)
     parser.add_argument('--model-num-features', type=int, default=6)
