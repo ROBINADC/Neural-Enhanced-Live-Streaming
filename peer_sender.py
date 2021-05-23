@@ -22,7 +22,7 @@ from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 from media import MediaPlayer, MediaRelay, MediaPlayerDelta
 from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution, ClassLogger
 
-logger = logging.getLogger('client')
+logger = logging.getLogger('sender')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
 
 
@@ -127,7 +127,7 @@ class PatchSampler:
 class PatchTransmitter(ClassLogger):
     def __init__(self, patch_sampler: PatchSampler):
         """
-        PatchTransmitter at client side.
+        PatchTransmitter at sender side.
         The PatchTransmitter has following functionality:
         - sample training patches using the provided PatchSampler object
         - deliver training patch to RTC's data channel
@@ -135,7 +135,7 @@ class PatchTransmitter(ClassLogger):
         Args:
             patch_sampler (): patch sampler instance
         """
-        super().__init__('client')
+        super().__init__('sender')
 
         self._sampler = patch_sampler
 
@@ -187,7 +187,7 @@ class PatchTransmitter(ClassLogger):
         self._patch_channel = channel
 
 
-async def run_client(pc: RTCPeerConnection, signaling, audio, video, worker: PatchTransmitter):
+async def run_sender(pc: RTCPeerConnection, signaling, audio, video, worker: PatchTransmitter):
     def add_senders():
         for t in pc.getTransceivers():
             if t.kind == 'audio' and audio:
@@ -235,7 +235,7 @@ async def run_client(pc: RTCPeerConnection, signaling, audio, video, worker: Pat
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Ingest client (answer peer)')
+    parser = argparse.ArgumentParser(description='Conferencing peer (Sender)')
     parser.add_argument('--play-from', type=str, help='Read the media from a file and sent it.')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
@@ -294,12 +294,12 @@ if __name__ == '__main__':
         # audio_track = player.audio
         video_track = player.video
 
-    # run client
+    # run sender
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run_client(pc, signaling, audio_track, video_track, patch_transmitter))
+        loop.run_until_complete(run_sender(pc, signaling, audio_track, video_track, patch_transmitter))
     except KeyboardInterrupt:
-        logger.info('keyboard interrupt while running client')
+        logger.info('keyboard interrupt while running sender')
     finally:
         # cleanup
         patch_transmitter.stop()
