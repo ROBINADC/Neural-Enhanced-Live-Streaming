@@ -20,7 +20,7 @@ from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RT
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
 from media import MediaPlayer, MediaRelay, MediaPlayerDelta
-from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution
+from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution, ClassLogger
 
 logger = logging.getLogger('client')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -124,15 +124,19 @@ class PatchSampler:
         return samples
 
 
-class Worker:
+class PatchTransmitter(ClassLogger):
     def __init__(self, patch_sampler: PatchSampler):
         """
-        Worker at client side. The worker has following functionality:
-        1) sample training patches and deliver to RTC's data channel
+        PatchTransmitter at client side.
+        The PatchTransmitter has following functionality:
+        - sample training patches using the provided PatchSampler object
+        - deliver training patch to RTC's data channel
 
         Args:
             patch_sampler (): patch sampler instance
         """
+        super().__init__('client')
+
         self._sampler = patch_sampler
 
         self._slot = MostRecentSlot()  # a wrap to a queue object that is passed to the MediaPlayerDelta, storing the "most recent" pair of frames
@@ -153,7 +157,7 @@ class Worker:
                     patch = Patch(hr_bytes, lr_bytes)
                     patch_bytes = pickle.dumps(patch)
                     self._patch_channel.send(patch_bytes)
-                self.__log_debug(f'put {len(samples)} samples to patch channel')
+                self.log_debug(f'put {len(samples)} samples to patch channel')
 
             except asyncio.CancelledError:
                 return
@@ -182,14 +186,8 @@ class Worker:
     def patch_channel(self, channel: RTCDataChannel):
         self._patch_channel = channel
 
-    def __log_info(self, msg: str, *args) -> None:
-        logger.info(f'[Worker] {msg}', *args)
 
-    def __log_debug(self, msg: str, *args) -> None:
-        logger.info(f'[Worker] {msg}', *args)
-
-
-async def run_client(pc: RTCPeerConnection, signaling, audio, video, worker: Worker):
+async def run_client(pc: RTCPeerConnection, signaling, audio, video, worker: PatchTransmitter):
     def add_senders():
         for t in pc.getTransceivers():
             if t.kind == 'audio' and audio:
@@ -270,7 +268,7 @@ if __name__ == '__main__':
                                  lr_width=low_resolution.width, lr_height=low_resolution.height,
                                  patch_grid_height=args.patch_grid_height, patch_grid_width=args.patch_grid_width,
                                  psnr_filter=True)
-    worker = Worker(patch_sampler)  # training patch worker
+    patch_transmitter = PatchTransmitter(patch_sampler)  # training patch worker
 
     # create media source
     audio_track = None  # use no audio for now
@@ -292,18 +290,18 @@ if __name__ == '__main__':
         if args.play_from is None:
             logger.info('need to specify local media file. Exit.')
             exit(0)
-        player = MediaPlayerDelta(args.play_from, frame_width=low_resolution.width, frame_height=low_resolution.height, slot=worker.slot)
+        player = MediaPlayerDelta(args.play_from, frame_width=low_resolution.width, frame_height=low_resolution.height, slot=patch_transmitter.slot)
         # audio_track = player.audio
         video_track = player.video
 
     # run client
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run_client(pc, signaling, audio_track, video_track, worker))
+        loop.run_until_complete(run_client(pc, signaling, audio_track, video_track, patch_transmitter))
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running client')
     finally:
         # cleanup
-        worker.stop()
+        patch_transmitter.stop()
         loop.run_until_complete(signaling.close())
         loop.run_until_complete(pc.close())
