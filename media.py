@@ -198,18 +198,24 @@ def player_worker_delta(
                 asyncio.run_coroutine_threadsafe(video_track._queue.put(None), loop)
             break
 
-        # read up to 1 second ahead
+        # read up to some time ahead to avoid excessive memory usage
         if throttle_playback:
             elapsed_time = time.time() - start_time
             if frame_time and frame_time > elapsed_time + 1:
-                time.sleep(0.6)  # change from 0.1. I think this should adapt to fps
-                # Normally, the thread adds frame in a very quick manner.
-                # If fps > 10, which is normal the case, then 0.1 is ok,
-                # becase the interval between adjacent frames is <0.1, say it 0.03 for 30fps.
-                # Now, if we find frame_time > elapsed_time + 1, we stop 0.1s,
-                # then we actually consume 3 frames then we add 1 frame, which attain the queue size.
-                # However, if fps == 5, sleep 0.1 wouldn't help.
-                # We can sleep 0.6
+                time.sleep(0.6)
+                """
+                Change from default 0.1.
+                
+                I think this should adapt to the playout framerate (fps) of the video.
+                Normally, the thread adds frame in a very quick manner.
+                If fps > 10, which is normal the case, then 0.1 is ok,
+                becase the interval between adjacent frames is < 0.1, say it 0.03 for 30fps.
+                
+                Now, if we find frame_time > elapsed_time + 1, we stop 0.1s,
+                then we actually consume 3 frames then we add 1 frame, which attain the queue size.
+                However, if fps == 5, sleep 0.1 wouldn't help.
+                We can sleep 0.6 at this case.
+                """
 
         if isinstance(frame, AudioFrame) and audio_track:
             if (
