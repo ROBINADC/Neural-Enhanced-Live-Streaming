@@ -1,0 +1,21 @@
+{
+  "iceServers": [
+    {
+      "urls": [
+        "stun:ss-turn3.xirsys.com"
+      ]
+    },
+    {
+      "username": "KG97B1VEJwK9TwHSt4rJ6TMzBt83EXvowMvhVuWQz6aObXqH0SocIIy9BZm2NJCTAAAAAGCrIqh5aXd1",
+      "credential": "4336cdb2-bc43-11eb-b016-0242ac120004",
+      "urls": [
+        "turn:ss-turn3.xirsys.com:80?transport=udp",
+        "turn:ss-turn3.xirsys.com:3478?transport=udp",
+        "turn:ss-turn3.xirsys.com:80?transport=tcp",
+        "turn:ss-turn3.xirsys.com:3478?transport=tcp",
+        "turns:ss-turn3.xirsys.com:443?transport=tcp",
+        "turns:ss-turn3.xirsys.com:5349?transport=tcp"
+      ]
+    }
+  ]
+}
