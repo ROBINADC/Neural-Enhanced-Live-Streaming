@@ -21,11 +21,11 @@ from av import VideoFrame
 # import cv2
 import torch
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack, RTCConfiguration
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
 from media import MediaRelay, MediaRecorderDelta, MediaBlackhole
-from misc import get_resolution, ClassLogger
+from misc import ClassLogger, get_ice_servers, get_resolution
 from model import SingleNetwork
 
 logger = logging.getLogger('receiver')
@@ -222,16 +222,30 @@ if __name__ == '__main__':
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
     parser.add_argument('--signaling-port', type=int, default=10001, help='TCP socket signaling port')
+
+    # ICE server
+    parser.add_argument('--ice-config', type=str, help='ICE server configuration')
+    parser.add_argument('--ice-provider', type=str, default='google', help='ICE server provider')
     args = parser.parse_args()
 
     os.makedirs(args.record_dir, exist_ok=True)
 
+    # logging settings
     logging.basicConfig(level=logging.INFO)
     logger.setLevel(level=logging.DEBUG if args.debug else logging.INFO)
 
     # RTC
-    signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port)  # signaling server
-    pc = RTCPeerConnection()
+    signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port)
+
+    if args.ice_config is None:
+        logger.info('ice server is not configured')
+        ice_servers = None
+    else:
+        logger.info(f'configure ice server from {args.ice_provider}')
+        ice_servers = get_ice_servers(args.ice_config, args.ice_provider)  # a list of ice servers (might be empty)
+    rtc_config = RTCConfiguration(iceServers=ice_servers)
+
+    pc = RTCPeerConnection(configuration=rtc_config)
 
     # media sink
     low_resolution = get_resolution(args.lr_height)
