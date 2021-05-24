@@ -20,13 +20,14 @@ import cv2
 from aiortc import RTCIceServer
 
 
-def get_ice_servers(file: str = None) -> List[RTCIceServer]:
+def get_ice_servers(file: str = None, provider: str = None) -> List[RTCIceServer]:
     """
     Get a list of ICE servers that configures STUN / TURN servers from given json file,
     or an empty list if file is not provided.
 
     Args:
         file (): file that contains the server information
+        provider (): the provider of the ICE servers
 
     Returns:
         A list of RTCIceServer objects.
@@ -37,7 +38,10 @@ def get_ice_servers(file: str = None) -> List[RTCIceServer]:
     with open(file, 'r') as fin:
         a = json.load(fin)
 
-    server_list = a['iceServers']
+    if provider is None or provider not in a.keys():
+        raise KeyError(f'Unrecognized provider: {provider}')
+
+    server_list = a[provider]
     ice_servers = [RTCIceServer(**sv) for sv in server_list]
 
     return ice_servers

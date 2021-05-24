@@ -29,7 +29,7 @@ from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import Patch, bytes_to_ndarray, ClassLogger, get_ice_servers
+from misc import get_ice_servers, ClassLogger, Patch, bytes_to_ndarray
 
 logger = logging.getLogger('server')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -446,6 +446,7 @@ if __name__ == '__main__':
 
     # ICE server
     parser.add_argument('--ice-config', type=str, help='ICE server configuration')
+    parser.add_argument('--ice-provider', type=str, default='google', help='ICE server provider')
     args = parser.parse_args()
 
     os.makedirs(args.log_dir, exist_ok=True)
@@ -454,6 +455,21 @@ if __name__ == '__main__':
     # logging settings
     logging.basicConfig(level=logging.INFO)
     logger.setLevel(level=logging.DEBUG if args.debug else logging.INFO)
+
+    # RTC
+    sender_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_sender)
+    receiver_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_receiver)
+
+    if args.ice_config is None:
+        logger.info('ice server is not configured')
+        ice_servers = None
+    else:
+        logger.info(f'configure ice server from {args.ice_provider}')
+        ice_servers = get_ice_servers(args.ice_config, args.ice_provider)  # a list of ice servers (might be empty)
+    rtc_config = RTCConfiguration(iceServers=ice_servers)
+
+    sender_pc = RTCPeerConnection(configuration=rtc_config)
+    receiver_pc = RTCPeerConnection(configuration=rtc_config)
 
     # train at another process
     mp.set_start_method('spawn', force=True)
@@ -464,16 +480,6 @@ if __name__ == '__main__':
 
     # track scheduler
     track_scheduler = TrackScheduler()
-
-    # RTC
-    ice_servers = get_ice_servers(args.ice_config)  # a list of ice servers (might be empty)
-    if len(ice_servers) == 0:
-        logger.info('ice servers are not configured')
-    rtc_config = RTCConfiguration(iceServers=ice_servers)
-    sender_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_sender)
-    sender_pc = RTCPeerConnection(configuration=rtc_config)
-    receiver_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_receiver)
-    receiver_pc = RTCPeerConnection(configuration=rtc_config)
 
     # run server - connects sender and receiver
     loop = asyncio.get_event_loop()

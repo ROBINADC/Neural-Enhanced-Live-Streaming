@@ -16,11 +16,11 @@ import numpy as np
 # from av import VideoFrame
 import cv2
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCConfiguration
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
 from media import MediaPlayer, MediaRelay, MediaPlayerDelta
-from misc import Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution, ClassLogger
+from misc import get_ice_servers, ClassLogger, Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution
 
 logger = logging.getLogger('sender')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -253,13 +253,28 @@ if __name__ == '__main__':
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
     parser.add_argument('--signaling-port', type=int, default=9999, help='TCP socket signaling port')
+
+    # ICE server
+    parser.add_argument('--ice-config', type=str, help='ICE server configuration')
+    parser.add_argument('--ice-provider', type=str, default='google', help='ICE server provider')
     args = parser.parse_args()
 
+    # logging settings
     logging.basicConfig(level=logging.INFO)
     logger.setLevel(level=logging.DEBUG if args.debug else logging.INFO)
 
-    signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port)  # signaling server
-    pc = RTCPeerConnection()  # peer connection
+    # RTC
+    signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port)
+
+    if args.ice_config is None:
+        logger.info('ice server is not configured')
+        ice_servers = None
+    else:
+        logger.info(f'configure ice server from {args.ice_provider}')
+        ice_servers = get_ice_servers(args.ice_config, args.ice_provider)  # a list of ice servers (might be empty)
+    rtc_config = RTCConfiguration(iceServers=ice_servers)
+
+    pc = RTCPeerConnection(rtc_config)
 
     high_resolution = get_resolution(args.hr_height)
     low_resolution = get_resolution(args.lr_height)
