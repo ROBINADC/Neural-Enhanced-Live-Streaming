@@ -5,16 +5,42 @@ Miscellany
 __author__ = "Yihang Wu"
 
 import re
+import json
 import time
 from datetime import timedelta
 import math
 import logging
 from collections import namedtuple
+import asyncio
+from typing import List
 
+import numpy as np
 from av import VideoFrame
 import cv2
-import numpy as np
-import asyncio
+from aiortc import RTCIceServer
+
+
+def get_ice_servers(file: str = None) -> List[RTCIceServer]:
+    """
+    Get a list of ICE servers that configures STUN / TURN servers from given json file,
+    or an empty list if file is not provided.
+
+    Args:
+        file (): file that contains the server information
+
+    Returns:
+        A list of RTCIceServer objects.
+    """
+    if file is None:
+        return list()
+
+    with open(file, 'r') as fin:
+        a = json.load(fin)
+
+    server_list = a['iceServers']
+    ice_servers = [RTCIceServer(**sv) for sv in server_list]
+
+    return ice_servers
 
 
 class ClassLogger:

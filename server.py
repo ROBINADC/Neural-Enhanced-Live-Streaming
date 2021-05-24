@@ -22,14 +22,14 @@ import torch.optim as optim
 from torch.utils.data.dataloader import DataLoader
 import torch.multiprocessing as mp
 
-from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCConfiguration
 from aiortc.mediastreams import MediaStreamError
 from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 
 from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import Patch, bytes_to_ndarray, ClassLogger
+from misc import Patch, bytes_to_ndarray, ClassLogger, get_ice_servers
 
 logger = logging.getLogger('server')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -443,6 +443,9 @@ if __name__ == '__main__':
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
     parser.add_argument('--signaling-port-sender', type=int, default=9999, help='TCP socket signaling port for sender side')
     parser.add_argument('--signaling-port-receiver', type=int, default=10001, help='TCP socket signaling port for receiver side')
+
+    # ICE server
+    parser.add_argument('--ice-config', type=str, help='ICE server configuration')
     args = parser.parse_args()
 
     os.makedirs(args.log_dir, exist_ok=True)
@@ -463,10 +466,14 @@ if __name__ == '__main__':
     track_scheduler = TrackScheduler()
 
     # RTC
+    ice_servers = get_ice_servers(args.ice_config)  # a list of ice servers (might be empty)
+    if len(ice_servers) == 0:
+        logger.info('ice servers are not configured')
+    rtc_config = RTCConfiguration(iceServers=ice_servers)
     sender_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_sender)
-    sender_pc = RTCPeerConnection()
+    sender_pc = RTCPeerConnection(configuration=rtc_config)
     receiver_signaling = TcpSocketSignaling(args.signaling_host, args.signaling_port_receiver)
-    receiver_pc = RTCPeerConnection()
+    receiver_pc = RTCPeerConnection(configuration=rtc_config)
 
     # run server - connects sender and receiver
     loop = asyncio.get_event_loop()
@@ -474,7 +481,6 @@ if __name__ == '__main__':
         sender_coro = comm_sender(sender_pc, sender_signaling, patch_queue, track_scheduler)
         receiver_coro = comm_receiver(receiver_pc, receiver_signaling, model_queue, track_scheduler)
         loop.run_until_complete(asyncio.gather(sender_coro, receiver_coro))
-
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running server')
     finally:
