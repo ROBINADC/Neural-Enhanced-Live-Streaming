@@ -127,20 +127,34 @@ Resolution = namedtuple('Resolution', ('width', 'height'))
 
 def get_resolution(height_or_quality: int) -> Resolution:
     """
-    Get resolution for 16:9 screen
+    Get resolution for 4:3 screen
     """
-    if height_or_quality in (1080, 4):
-        return Resolution(1920, 1080)
-    elif height_or_quality in (720, 3):
-        return Resolution(1280, 720)
-    elif height_or_quality in (540, 2):
-        return Resolution(960, 540)
+    if height_or_quality in (720, 3):
+        return Resolution(960, 720)
+    elif height_or_quality in (480, 2):
+        return Resolution(640, 480)
     elif height_or_quality in (360, 1):
-        return Resolution(640, 360)
-    elif height_or_quality in (270, 0):
-        return Resolution(480, 270)
+        return Resolution(480, 360)
+    elif height_or_quality in (240, 0):
+        return Resolution(320, 240)
     else:
         raise NotImplementedError
+
+    # """
+    # Get resolution for 16:9 screen
+    # """
+    # if height_or_quality in (1080, 4):
+    #     return Resolution(1920, 1080)
+    # elif height_or_quality in (720, 3):
+    #     return Resolution(1280, 720)
+    # elif height_or_quality in (540, 2):
+    #     return Resolution(960, 540)
+    # elif height_or_quality in (360, 1):
+    #     return Resolution(640, 360)
+    # elif height_or_quality in (270, 0):
+    #     return Resolution(480, 270)
+    # else:
+    #     raise NotImplementedError
 
 
 def atoi(text):
