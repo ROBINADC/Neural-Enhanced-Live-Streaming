@@ -11,6 +11,7 @@ __author__ = "Yihang Wu"
 
 from io import BytesIO
 import os
+from fractions import Fraction
 import argparse
 import logging
 import asyncio
@@ -25,7 +26,7 @@ from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RT
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
 from media import MediaRelay, MediaRecorderDelta, MediaBlackhole
-from misc import ClassLogger, get_ice_servers, get_resolution
+from misc import ClassLogger, Resolution, get_ice_servers
 from model import SingleNetwork
 
 logger = logging.getLogger('receiver')
@@ -205,8 +206,9 @@ if __name__ == '__main__':
     parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
     parser.add_argument('--not-record-sr', action='store_true', help='Do not record SR video')
     parser.add_argument('--not-record-raw', action='store_true', help='Do not record raw video')
-    parser.add_argument('--hr-height', type=int, default=720, help='Height of origin high-resolution video')
-    parser.add_argument('--lr-height', type=int, default=360, help='Height of transformed low-resolution video')
+    parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
+    parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
+    parser.add_argument('--lr-height', type=int, default=240, help='Height of transformed low-resolution video')
     parser.add_argument('--fps', type=int, default=5)
 
     # model
@@ -247,8 +249,11 @@ if __name__ == '__main__':
 
     pc = RTCPeerConnection(configuration=rtc_config)
 
+    aspect_ratio = Fraction(*map(int, args.aspect_ratio.split('x')))
+    high_resolution = Resolution.get(args.hr_height, aspect_ratio)
+    low_resolution = Resolution.get(args.lr_height, aspect_ratio)
+
     # media sink
-    low_resolution = get_resolution(args.lr_height)
     if args.record_dir and not args.not_record_raw:
         recorder_raw = MediaRecorderDelta(os.path.join(args.record_dir, args.record_raw_fn),
                                           logfile=os.path.join(args.log_dir, 'receiver_recorder_raw.log'),
@@ -256,7 +261,6 @@ if __name__ == '__main__':
     else:
         recorder_raw = MediaBlackhole()
 
-    high_resolution = get_resolution(args.hr_height)
     if args.record_dir and not args.not_record_sr:
         recorder_sr = MediaRecorderDelta(os.path.join(args.record_dir, args.record_sr_fn),
                                          logfile=os.path.join(args.log_dir, 'receiver_recorder_sr.log'),
