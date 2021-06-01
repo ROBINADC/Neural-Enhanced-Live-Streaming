@@ -136,8 +136,8 @@ class Resolution:
     }
 
     def __init__(self, _width, _height):
-        self._width = None
-        self._height = None
+        self._width = _width
+        self._height = _height
 
     @classmethod
     def get(cls, height: int, aspect_ratio: Fraction):
