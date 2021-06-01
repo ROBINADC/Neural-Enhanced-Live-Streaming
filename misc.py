@@ -9,6 +9,7 @@ import json
 import time
 from datetime import timedelta
 import math
+from fractions import Fraction
 import logging
 from collections import namedtuple
 import asyncio
@@ -122,39 +123,37 @@ def cal_psnr(pred, true, max_val):
         return 20 * math.log10(max_val / math.sqrt(mse))
 
 
-Resolution = namedtuple('Resolution', ('width', 'height'))
-
-
-def get_resolution(height_or_quality: int) -> Resolution:
+class Resolution:
     """
-    Get resolution for 4:3 screen
+    Resolution for 4:3 or 16:9 screen
     """
-    if height_or_quality in (720, 3):
-        return Resolution(960, 720)
-    elif height_or_quality in (480, 2):
-        return Resolution(640, 480)
-    elif height_or_quality in (360, 1):
-        return Resolution(480, 360)
-    elif height_or_quality in (240, 0):
-        return Resolution(320, 240)
-    else:
-        raise NotImplementedError
+    ASPECT_RATIO_4_3 = Fraction(4, 3)
+    ASPECT_RATIO_16_9 = Fraction(16, 9)
 
-    # """
-    # Get resolution for 16:9 screen
-    # """
-    # if height_or_quality in (1080, 4):
-    #     return Resolution(1920, 1080)
-    # elif height_or_quality in (720, 3):
-    #     return Resolution(1280, 720)
-    # elif height_or_quality in (540, 2):
-    #     return Resolution(960, 540)
-    # elif height_or_quality in (360, 1):
-    #     return Resolution(640, 360)
-    # elif height_or_quality in (270, 0):
-    #     return Resolution(480, 270)
-    # else:
-    #     raise NotImplementedError
+    height_to_width = {
+        ASPECT_RATIO_4_3: {240: 320, 360: 480, 480: 640, 720: 960},
+        ASPECT_RATIO_16_9: {270: 480, 360: 640, 540: 960, 720: 1280, 1080: 1920}
+    }
+
+    def __init__(self, _width, _height):
+        self._width = None
+        self._height = None
+
+    @classmethod
+    def get(cls, height: int, aspect_ratio: Fraction):
+        try:
+            width = Resolution.height_to_width[aspect_ratio][height]
+        except KeyError as e:
+            raise NotImplementedError(f'Invalid key {e}')
+        return Resolution(width, height)
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def height(self):
+        return self._height
 
 
 def atoi(text):
