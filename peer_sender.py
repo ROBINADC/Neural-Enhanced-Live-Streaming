@@ -8,6 +8,7 @@ __author__ = "Yihang Wu"
 import argparse
 import logging
 import random
+from fractions import Fraction
 import pickle
 import platform
 import asyncio
@@ -19,8 +20,8 @@ import cv2
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCConfiguration
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
-from media import MediaPlayer, MediaRelay, MediaPlayerDelta
-from misc import get_ice_servers, ClassLogger, Patch, MostRecentSlot, frame_to_ndarray, ndarray_to_bytes, cal_psnr, get_resolution
+from media import MediaRelay, MediaPlayerDelta
+from misc import ClassLogger, Resolution, Patch, MostRecentSlot, get_ice_servers, frame_to_ndarray, ndarray_to_bytes, cal_psnr
 
 logger = logging.getLogger('sender')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -187,7 +188,7 @@ class PatchTransmitter(ClassLogger):
         self._patch_channel = channel
 
 
-async def run_sender(pc: RTCPeerConnection, signaling, audio, video, worker: PatchTransmitter):
+async def run_sender(pc: RTCPeerConnection, signaling, audio, video, patch_transmitter: PatchTransmitter):
     def add_senders():
         for t in pc.getTransceivers():
             if t.kind == 'audio' and audio:
@@ -200,8 +201,8 @@ async def run_sender(pc: RTCPeerConnection, signaling, audio, video, worker: Pat
         logger.info('Received data channel: %s', channel.label)
 
         if channel.label == 'patch':
-            worker.patch_channel = channel
-            worker.start()
+            patch_transmitter.patch_channel = channel
+            patch_transmitter.start()
         elif channel.label == 'dummy':
             pass
         else:
@@ -209,7 +210,6 @@ async def run_sender(pc: RTCPeerConnection, signaling, audio, video, worker: Pat
 
     # connect signaling
     await signaling.connect()
-
     # consume signaling
     while True:
         try:
@@ -240,15 +240,16 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
     # video
-    parser.add_argument('--hr-height', type=int, default=720, help='Height of origin high-resolution video')
-    parser.add_argument('--lr-height', type=int, default=360, help='Height of transformed low-resolution video')
-    parser.add_argument('--patch-grid-height', type=int, default=9, help='Height of the patch grid')
+    parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
+    parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
+    parser.add_argument('--lr-height', type=int, default=240, help='Height of transformed low-resolution video')
+    parser.add_argument('--patch-grid-height', type=int, default=12, help='Height of the patch grid')
     parser.add_argument('--patch-grid-width', type=int, default=16, help='Width of the patch grid')
 
     # camera
     parser.add_argument('--use-camera', action='store_true', help='Use camera (--play-from is ignored if set)')
-    parser.add_argument('--cam-framerate', type=str, default='10', help='Camera ingest frame rate')
-    parser.add_argument('--cam-videosize', type=str, default='640x360', help='Camera ingest resolution')
+    parser.add_argument('--cam-framerate', type=str, default='30', help='Camera ingest frame rate')
+    parser.add_argument('--cam-videosize', type=str, default='640x480', help='Camera ingest resolution')
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
@@ -276,8 +277,9 @@ if __name__ == '__main__':
 
     pc = RTCPeerConnection(rtc_config)
 
-    high_resolution = get_resolution(args.hr_height)
-    low_resolution = get_resolution(args.lr_height)
+    aspect_ratio = Fraction(*map(int, args.aspect_ratio.split('x')))
+    high_resolution = Resolution.get(args.hr_height, aspect_ratio)
+    low_resolution = Resolution.get(args.lr_height, aspect_ratio)
 
     patch_sampler = PatchSampler(hr_width=high_resolution.width, hr_height=high_resolution.height,
                                  lr_width=low_resolution.width, lr_height=low_resolution.height,
@@ -296,7 +298,8 @@ if __name__ == '__main__':
         }
         # associate webcam and create MediaStreamTrack from ingest content
         if platform.system() == 'Linux':
-            webcam = MediaPlayer('/dev/video0', format='v4l2', options=options)
+            webcam = MediaPlayerDelta('/dev/video0', format='v4l2', options=options, frame_width=low_resolution.width,
+                                      frame_height=low_resolution.height, slot=patch_transmitter.slot)
         else:
             raise NotImplementedError
         # audio_track = None
