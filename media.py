@@ -168,7 +168,7 @@ def player_worker(
 
 def player_worker_delta(
         loop, container, streams, audio_track, video_track, quit_event, throttle_playback,
-        frame_height, frame_width, slot
+        frame_height, frame_width, slot, framerate_degradation
 ):
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
@@ -185,9 +185,14 @@ def player_worker_delta(
     frame_time = None
     start_time = time.time()
 
+    count = -1
+
     while not quit_event.is_set():
         try:
             frame = next(container.decode(*streams))
+            count += 1
+            if count % framerate_degradation != 0:
+                continue
         except (av.AVError, StopIteration) as exc:
             if isinstance(exc, av.FFmpegError) and exc.errno == errno.EAGAIN:
                 time.sleep(0.01)
@@ -476,7 +481,7 @@ class MediaPlayerDelta:
     - use player_worker_delta to crop frame and add pair to queue
     """
 
-    def __init__(self, file, frame_width, frame_height, slot=None, format=None, options={}):
+    def __init__(self, file, frame_width, frame_height, slot=None, framerate_degradation=1, format=None, options={}):
         self.__container = av.open(file=file, format=format, mode="r", options=options)
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
@@ -501,6 +506,7 @@ class MediaPlayerDelta:
         self._frame_width = frame_width  # desired playout width
         self._frame_height = frame_height  # desired playout height
         self._slot = slot  # asyncio.Queue wrapper that stores "most recent" [hr, lr] frame pair
+        self._framerate_degradation = framerate_degradation
 
     @property
     def audio(self) -> MediaStreamTrack:
@@ -534,7 +540,8 @@ class MediaPlayerDelta:
                     self._throttle_playback,
                     self._frame_height,
                     self._frame_width,
-                    self._slot
+                    self._slot,
+                    self._framerate_degradation
                 ),
             )
             self.__thread.start()
