@@ -239,17 +239,18 @@ if __name__ == '__main__':
     parser.add_argument('--play-from', type=str, help='Read the media from a file and sent it.')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
+    # camera
+    parser.add_argument('--use-camera', action='store_true', help='Use camera (--play-from is ignored if set)')
+    parser.add_argument('--cam-framerate', type=str, default='30', help='Camera ingest frame rate')
+    parser.add_argument('--cam-videosize', type=str, default='640x480', help='Camera ingest resolution')
+
     # video
+    parser.add_argument('--framerate-degradation', type=int, default=6, help='Use only 1 frame every specified frames')
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
     parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=240, help='Height of transformed low-resolution video')
     parser.add_argument('--patch-grid-height', type=int, default=12, help='Height of the patch grid')
     parser.add_argument('--patch-grid-width', type=int, default=16, help='Width of the patch grid')
-
-    # camera
-    parser.add_argument('--use-camera', action='store_true', help='Use camera (--play-from is ignored if set)')
-    parser.add_argument('--cam-framerate', type=str, default='30', help='Camera ingest frame rate')
-    parser.add_argument('--cam-videosize', type=str, default='640x480', help='Camera ingest resolution')
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
@@ -287,19 +288,27 @@ if __name__ == '__main__':
                                  psnr_filter=True)
     patch_transmitter = PatchTransmitter(patch_sampler)  # training patch worker
 
-    # create media source
-    audio_track = None  # use no audio for now
+    # framerate degradation
+    """
+    When the capability of the receiving device is insufficient,
+    degrade the framerate of the original stream with level FR_DEG.
+    Sample 1 frame every FR_DEG frames.
+    For example, when the origin video is 30 fps,
+    setting FR_DEG to 3 degrades the video to 10 fps;
+    setting FR_DEG to 6 degrades the video to 5 fps.
+    """
+    fr_deg = args.framerate_degradation
+    logger.info(f'Framerate degradation level is set to {fr_deg}')
+
+    # media source
+    audio_track = None
     video_track = None
-    if args.use_camera:  # use webcam (NOT support as my camera does not take 1080 input)
-        # camera options
-        options = {
-            'framerate': args.cam_framerate,
-            'video_size': args.cam_videosize
-        }
-        # associate webcam and create MediaStreamTrack from ingest content
+    if args.use_camera:
+        # camera options (not all options are supported)
+        options = {'framerate': args.cam_framerate, 'video_size': args.cam_videosize}
         if platform.system() == 'Linux':
-            webcam = MediaPlayerDelta('/dev/video0', format='v4l2', options=options, frame_width=low_resolution.width,
-                                      frame_height=low_resolution.height, slot=patch_transmitter.slot)
+            webcam = MediaPlayerDelta('/dev/video0', frame_width=low_resolution.width, frame_height=low_resolution.height,
+                                      slot=patch_transmitter.slot, framerate_degradation=fr_deg, format='v4l2', options=options)
         else:
             raise NotImplementedError
         # audio_track = None
@@ -308,7 +317,8 @@ if __name__ == '__main__':
         if args.play_from is None:
             logger.info('need to specify local media file. Exit.')
             exit(0)
-        player = MediaPlayerDelta(args.play_from, frame_width=low_resolution.width, frame_height=low_resolution.height, slot=patch_transmitter.slot)
+        player = MediaPlayerDelta(args.play_from, frame_width=low_resolution.width, frame_height=low_resolution.height,
+                                  slot=patch_transmitter.slot, framerate_degradation=fr_deg)
         # audio_track = player.audio
         video_track = player.video
 
