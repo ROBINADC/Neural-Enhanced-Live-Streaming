@@ -209,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
     parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=240, help='Height of transformed low-resolution video')
-    parser.add_argument('--fps', type=int, default=5)
+    parser.add_argument('--fps', type=int, default=30)
 
     # model
     parser.add_argument('--not-use-cuda', action='store_true')
