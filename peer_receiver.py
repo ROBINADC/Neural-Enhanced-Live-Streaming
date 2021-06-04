@@ -202,8 +202,8 @@ if __name__ == '__main__':
 
     # video
     parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
-    parser.add_argument('--record-sr-fn', type=str, default='sr.mp4', help='SR video record name')
-    parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
+    parser.add_argument('--record-sr-fn', type=str, default='sr.avi', help='SR video record name')
+    parser.add_argument('--record-raw-fn', type=str, default='raw.avi', help='Raw video record name')
     parser.add_argument('--not-record-sr', action='store_true', help='Do not record SR video')
     parser.add_argument('--not-record-raw', action='store_true', help='Do not record raw video')
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
