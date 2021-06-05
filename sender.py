@@ -126,7 +126,7 @@ class PatchSampler:
 
 
 class PatchTransmitter(ClassLogger):
-    def __init__(self, patch_sampler: PatchSampler):
+    def __init__(self, patch_sampler: PatchSampler, sample_freq, sample_num):
         """
         PatchTransmitter at sender side.
         The PatchTransmitter has following functionality:
@@ -135,6 +135,8 @@ class PatchTransmitter(ClassLogger):
 
         Args:
             patch_sampler (): patch sampler instance
+            sample_freq (float): the frequency of sampling patches
+            sample_num (int): the number of patches that each sampling process gets
         """
         super().__init__('sender')
 
@@ -144,14 +146,17 @@ class PatchTransmitter(ClassLogger):
         self._patch_channel = None  # the RTC patch channel
         self._task = None
 
+        self._interval = 1 / sample_freq
+        self._sample_num = sample_num
+
     async def _run(self):
         while True:
             try:
-                await asyncio.sleep(0.5)  # sample frame every one second (can further adjust to listen some signal)
+                await asyncio.sleep(self._interval)  # sample frames every specific second (can further adjust to listen some signal)
                 hr_frame, lr_frame = await self._slot.get()  # this is not the most recent frame, but the frame head of recent frame 0~0.1s
                 self._sampler.place(frame_to_ndarray(hr_frame),  # (hr_height, hr_width, 3)
                                     frame_to_ndarray(lr_frame))  # (lr_height, lr_width, 3)
-                samples = self._sampler.sample(10)
+                samples = self._sampler.sample(self._sample_num)
                 for hr_patch, lr_patch in samples:
                     hr_bytes = ndarray_to_bytes(hr_patch)
                     lr_bytes = ndarray_to_bytes(lr_patch)
@@ -249,8 +254,12 @@ if __name__ == '__main__':
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
     parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
     parser.add_argument('--lr-height', type=int, default=240, help='Height of transformed low-resolution video')
+
+    # patch (for SR training)
     parser.add_argument('--patch-grid-height', type=int, default=12, help='Height of the patch grid')
     parser.add_argument('--patch-grid-width', type=int, default=16, help='Width of the patch grid')
+    parser.add_argument('--patch-sampling-frequency', type=float, default=2.0, help='the frequency of sampling patches')
+    parser.add_argument('--patch-sampling-num', type=int, default=10, help='the number of patches that each sampling process gets')
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
@@ -286,7 +295,9 @@ if __name__ == '__main__':
                                  lr_width=low_resolution.width, lr_height=low_resolution.height,
                                  patch_grid_height=args.patch_grid_height, patch_grid_width=args.patch_grid_width,
                                  psnr_filter=True)
-    patch_transmitter = PatchTransmitter(patch_sampler)  # training patch worker
+    patch_transmitter = PatchTransmitter(patch_sampler,
+                                         sample_freq=args.patch_sampling_frequency,
+                                         sample_num=args.patch_sampling_num)
 
     # framerate degradation
     """
