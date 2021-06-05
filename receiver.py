@@ -214,8 +214,8 @@ if __name__ == '__main__':
     # model
     parser.add_argument('--not-use-cuda', action='store_true')
     parser.add_argument('--model-scale', type=int, default=2)
-    parser.add_argument('--model-num-blocks', type=int, default=6)
-    parser.add_argument('--model-num-features', type=int, default=6)
+    parser.add_argument('--model-num-blocks', type=int, default=8)
+    parser.add_argument('--model-num-features', type=int, default=8)
 
     # inference
     parser.add_argument('--load-pretrained', action='store_true', help='Load pretrained model for super-resolution (NOT RECOMMAND)')

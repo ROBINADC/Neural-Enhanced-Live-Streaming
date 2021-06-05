@@ -106,12 +106,18 @@ class TrackScheduler(ClassLogger):
     - invoke stop_consuming to stop consuming frames
     """
 
-    def __init__(self):
+    def __init__(self, logfile: str = None):
         super().__init__('server')
 
         self._event = asyncio.Event()
         self._track = None
         self._signal = False
+
+        try:
+            self._log = open(logfile, 'w')
+        except (TypeError, FileNotFoundError):
+            self._log = open(os.devnull, 'w')
+        self._count = 0
 
     def set_track(self, track):
         self._track = track
@@ -126,9 +132,13 @@ class TrackScheduler(ClassLogger):
         while not self._signal:
             try:
                 await self._track.recv()
+                self._count += 1
             except MediaStreamError:
                 self.log_debug('stop consuming due to MediaStreamError')
                 return
+        else:
+            self._log.write(f'{self._count}')
+            self._log.close()
 
     def stop_consuming(self):
         self._signal = True
@@ -423,8 +433,8 @@ if __name__ == '__main__':
     # model
     parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--model-scale', type=int, default=2)
-    parser.add_argument('--model-num-blocks', type=int, default=6)
-    parser.add_argument('--model-num-features', type=int, default=6)
+    parser.add_argument('--model-num-blocks', type=int, default=8)
+    parser.add_argument('--model-num-features', type=int, default=8)
 
     # train
     parser.add_argument('--ckpt-dir', type=str, default='result/ckpt', help='Directory for training checkpoint')
@@ -479,7 +489,7 @@ if __name__ == '__main__':
     train_process.start()
 
     # track scheduler
-    track_scheduler = TrackScheduler()
+    track_scheduler = TrackScheduler(logfile=os.path.join(args.log_dir, 'server_consume_frame.log'))
 
     # run server - connects sender and receiver
     loop = asyncio.get_event_loop()
