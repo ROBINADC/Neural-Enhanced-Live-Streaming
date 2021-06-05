@@ -9,19 +9,18 @@ __author__ = "Yihang Wu"
 import os
 import math
 from functools import partial
-from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 import cv2
 
-DIR_QUALITY = 'result/quality'
-DIR_FRAMES = 'result/frames'
+DIR_QUALITY = '../result/quality'
+DIR_FRAMES = '../result/frames'
 
-FILE_FRAME_CONSUME = 'result/logs/server_consume_frame.log'
-FILE_VIDEO_SRC = 'data/video/dana_480p_5fps.mp4'
-FILE_VIDEO_RAW = 'result/records/raw.mp4'
-FILE_VIDEO_SR = 'result/records/sr.mp4'
+FILE_FRAME_CONSUME = '../result/logs/server_consume_frame.log'
+FILE_VIDEO_SRC = '../data/video/dana_480p_5fps.mp4'
+FILE_VIDEO_RAW = '../result/records/raw.mp4'
+FILE_VIDEO_SR = '../result/records/sr.mp4'
 
 BOOL_SAVE_FRAMES = False
 INT_SKIP_UNTIL = 100
@@ -62,6 +61,8 @@ def upsample(image, scale=2):
 
 
 def cal_psnr(pred, true, max_val=255):
+    pred = pred.astype(np.int16)
+    true = true.astype(np.int16)
     mse = np.mean((pred - true) ** 2)
     if mse == 0:
         return 100
@@ -93,7 +94,7 @@ if __name__ == '__main__':
         sr_psnrs.append(cal_psnr(sr_frame, src_frame))
 
     df = pd.DataFrame({'index': indices, 'raw': raw_psnrs, 'sr': sr_psnrs})
-    df.to_csv(os.path.join(DIR_QUALITY, f'{uuid4()}.csv'), index=False)
+    df.to_csv(os.path.join(DIR_QUALITY, f'temp.csv'), index=False)
 
     print(np.mean(raw_psnrs[1000:]))
     print(np.mean(sr_psnrs[1000:]))
