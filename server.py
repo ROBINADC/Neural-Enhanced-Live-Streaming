@@ -14,7 +14,6 @@ import time
 import asyncio
 
 # import numpy as np
-# from av import VideoFrame
 # import cv2
 import torch
 import torch.nn as nn
@@ -241,7 +240,6 @@ class OnlineTrainer(ClassLogger):
         self.model.train()
 
         for iteration, (x, y) in enumerate(self.dataloader):
-            # time.sleep(0.01)  # ?? yield the gpu so that inference can use it
             x, y = x.to(self.device), y.to(self.device)  # (*, 3, patch_height, patch_width)
 
             self.optimizer.zero_grad()
@@ -430,7 +428,7 @@ if __name__ == '__main__':
     # train
     parser.add_argument('--use-gpu', action='store_true', help='Use GPU to train. Default for using CPU.')
     parser.add_argument('--save-ckpt', action='store_true', help='Save training checkpoints to local if set')
-    parser.add_argument('--duration-per-epoch', type=int, default=5, help='The training thread will pause until the epoch takes certain duration')
+    parser.add_argument('--duration-per-epoch', type=float, default=5, help='The training thread will pause until the epoch takes certain duration')
     parser.add_argument('--num-items-per-epoch', type=int, default=3000, help='The number of training items per epoch')
     parser.add_argument('--batch-size', type=int, default=64, help='Batch size')
     parser.add_argument('--num-biased-samples', type=int, default=150)
