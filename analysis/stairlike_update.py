@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-FILE_CSV = '../result/quality/temp.csv'
+FILE_CSV = '../result/dump/2_10_0.05_22.69_23.49.csv'
 SMOOTH_VALUE = 5  # group N data points and use their average
 
 df = pd.read_csv(FILE_CSV)
@@ -25,14 +25,18 @@ seconds_smooth = indices_smooth / SMOOTH_VALUE
 softing = lambda a: np.mean(np.reshape(a, (-1, SMOOTH_VALUE)), axis=1)
 diff_smooth = softing(diff)
 
-fig = plt.figure(figsize=(12, 6))
+fig = plt.figure(figsize=(9, 6))
 ax = fig.add_subplot(111)
-ax.plot(seconds_smooth, diff_smooth, label='sr - raw', linewidth=1)
+ax.plot(seconds_smooth, diff_smooth, label='SR quality minus raw quality', linewidth=2)
 
 ax.xaxis.set_major_locator(plt.MultipleLocator(60))
-plt.xlabel('Seconds')
-plt.ylabel('PSNR Difference')
+ax.xaxis.set_minor_locator(plt.MultipleLocator(20))
+plt.grid(axis='x', which='major', ls='--', linewidth=0.5)
+plt.grid(axis='x', which='minor', ls='--', linewidth=0.5)
+
+plt.xlabel('Time (sec)')
+plt.ylabel('PSNR Gain (dB)')
 
 plt.legend()
 # plt.show()
-plt.savefig('../result/quality/temp_diff.eps')
+plt.savefig('../result/quality/temp_diff.eps', bbox_inches='tight', pad_inches=0)
