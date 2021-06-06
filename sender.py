@@ -260,7 +260,6 @@ def get_device_list_dshow():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Conferencing peer (Sender)')
-    parser.add_argument('--play-from', type=str, help='Read the media from a file and sent it.')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
     # camera
@@ -269,6 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('--cam-videosize', type=str, default='640x480', help='Camera ingest resolution')
 
     # video
+    parser.add_argument('--play-from', type=str, help='Read the media from a file and sent it.')
     parser.add_argument('--framerate-degradation', type=int, default=1, help='Use only 1 frame every specified frames')
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
     parser.add_argument('--hr-height', type=int, default=480, help='Height of origin high-resolution video')
