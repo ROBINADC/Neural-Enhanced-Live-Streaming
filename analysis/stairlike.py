@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-FILE_CSV = '../result/dump/2_10_0.05_22.69_23.49.csv'
+FILE_CSV = '../result/archives/2_10_0.05_22.69_23.49.csv'
 SMOOTH_VALUE = 5  # group N data points and use their average
 
 df = pd.read_csv(FILE_CSV)
@@ -39,4 +39,4 @@ plt.ylabel('PSNR Gain (dB)')
 
 plt.legend()
 # plt.show()
-plt.savefig('../result/quality/temp_diff.eps', bbox_inches='tight', pad_inches=0)
+plt.savefig('../result/quality/temp_stairlike.eps', bbox_inches='tight', pad_inches=0.01)
