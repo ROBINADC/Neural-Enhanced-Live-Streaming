@@ -8,6 +8,8 @@ __author__ = "Yihang Wu"
 import argparse
 import logging
 import random
+import re
+import subprocess
 from fractions import Fraction
 import pickle
 import platform
@@ -239,6 +241,23 @@ async def run_sender(pc: RTCPeerConnection, signaling, audio, video, patch_trans
             break
 
 
+def get_device_list_dshow():
+    """
+    Get device name list under windows directshow
+    Change
+    - remove decode ascii
+    References: https://pyacq.readthedocs.io/en/latest/_modules/pyacq/devices/webcam_av.html
+    """
+    cmd = "ffmpeg -list_devices true -f dshow -i dummy"
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    txt = proc.stdout.read().decode()  # .decode('ascii')
+    txt = txt.split("DirectShow video devices")[1].split("DirectShow audio devices")[0]
+    pattern = '"([^"]*)"'
+    l = re.findall(pattern, txt, )
+    l = [e for e in l if not e.startswith('@')]
+    return l
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Conferencing peer (Sender)')
     parser.add_argument('--play-from', type=str, help='Read the media from a file and sent it.')
@@ -320,6 +339,10 @@ if __name__ == '__main__':
         if platform.system() == 'Linux':
             webcam = MediaPlayerDelta('/dev/video0', frame_width=low_resolution.width, frame_height=low_resolution.height,
                                       slot=patch_transmitter.slot, framerate_degradation=fr_deg, format='v4l2', options=options)
+        elif platform.system() == 'Windows':
+            device = get_device_list_dshow()[0]
+            webcam = MediaPlayerDelta(f'video={device}', frame_width=low_resolution.width, frame_height=low_resolution.height,
+                                      slot=patch_transmitter.slot, framerate_degradation=fr_deg, format='dshow', options=options)
         else:
             raise NotImplementedError
         # audio_track = None
