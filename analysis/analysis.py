@@ -1,6 +1,5 @@
 """
-This is used to 
-refer:
+Generate quantitative performance from videos (src, raw, sr)
 Created on 2021/6/4 
 """
 
@@ -60,9 +59,9 @@ def upsample(image, scale=2):
     return cv2.resize(image, dsize=new_shape, interpolation=cv2.INTER_CUBIC)
 
 
-def cal_psnr(pred, true, max_val=255):
-    pred = pred.astype(np.int16)
-    true = true.astype(np.int16)
+def cal_psnr(pred, true, max_val=255.):
+    pred = pred.astype(np.int32)  # convert to int32 in case the array is uint8
+    true = true.astype(np.int32)
     mse = np.mean((pred - true) ** 2)
     if mse == 0:
         return 100
@@ -74,7 +73,7 @@ if __name__ == '__main__':
     os.makedirs(DIR_QUALITY, exist_ok=True)
     os.makedirs(DIR_FRAMES, exist_ok=True)
 
-    num_frames_consumed = get_num_consumed()
+    num_frames_consumed = get_num_consumed()  # should be correctly updated
     print(num_frames_consumed)
 
     gen_src_frames = partial(gen_frames, FILE_VIDEO_SRC, start=0, skip_until=INT_SKIP_UNTIL, end=INT_END,
@@ -96,5 +95,9 @@ if __name__ == '__main__':
     df = pd.DataFrame({'index': indices, 'raw': raw_psnrs, 'sr': sr_psnrs})
     df.to_csv(os.path.join(DIR_QUALITY, f'temp.csv'), index=False)
 
-    print(np.mean(raw_psnrs[1000:]))
-    print(np.mean(sr_psnrs[1000:]))
+    print(np.mean(raw_psnrs))
+    print(np.mean(sr_psnrs))
+
+    # df = pd.read_csv('../result/quality/temp.csv')
+    # print(np.mean(df['raw']))
+    # print(np.mean(df['sr']))
