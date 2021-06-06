@@ -11,7 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 FILE_CSV = '../result/quality/temp.csv'
-SMOOTH_VALUE = 10  # group N data points and use their average
+SMOOTH_VALUE = 5  # group N data points and use their average
 
 df = pd.read_csv(FILE_CSV)
 
