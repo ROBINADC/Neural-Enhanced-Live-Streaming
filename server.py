@@ -395,8 +395,8 @@ async def comm_receiver(pc, signaling, model_queue, track_scheduler):
         model_transmitter.stop()
         log_info('model channel close')
 
-    await pc.setLocalDescription(await pc.createOffer())  # create SDP offer and set as local description
-    await signaling.send(pc.localDescription)  # send local description to signal server
+    await pc.setLocalDescription(await pc.createOffer())
+    await signaling.send(pc.localDescription)
 
     # consume signaling
     while True:
@@ -416,32 +416,23 @@ async def comm_receiver(pc, signaling, model_queue, track_scheduler):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Ingest server (offer peer)')
-    parser.add_argument('--process-type', type=str, default='sr', choices=('sr', 'grayish', 'none'))
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
-    parser.add_argument('--log-dir', type=str, default='result/logs', help='Directory for logs')
 
-    # video
-    # parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
-    # parser.add_argument('--record-sr-fn', type=str, default='sr.mp4', help='SR video record name')
-    # parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
-    # parser.add_argument('--not-record-sr', action='store_true')
-    # parser.add_argument('--not-record-raw', action='store_true')
-    # parser.add_argument('--hr-height', type=int, default=720)
-    # parser.add_argument('--lr-height', type=int, default=360)
-    # parser.add_argument('--fps', type=int, default=5)
+    # directory
+    parser.add_argument('--log-dir', type=str, default='result/logs', help='Directory for logs')
+    parser.add_argument('--ckpt-dir', type=str, default='result/ckpt', help='Directory for training checkpoint')
 
     # model
-    parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--model-scale', type=int, default=2)
     parser.add_argument('--model-num-blocks', type=int, default=8)
     parser.add_argument('--model-num-features', type=int, default=8)
 
     # train
-    parser.add_argument('--ckpt-dir', type=str, default='result/ckpt', help='Directory for training checkpoint')
+    parser.add_argument('--use-gpu', action='store_true', help='Use GPU to train. Default for using CPU.')
     parser.add_argument('--save-ckpt', action='store_true', help='Save training checkpoints to local if set')
     parser.add_argument('--duration-per-epoch', type=int, default=5, help='The training thread will pause until the epoch takes certain duration')
-    parser.add_argument('--num-items-per-epoch', type=int, default=3000)  # 3000
-    parser.add_argument('--batch-size', type=int, default=64)  # 64
+    parser.add_argument('--num-items-per-epoch', type=int, default=3000, help='The number of training items per epoch')
+    parser.add_argument('--batch-size', type=int, default=64, help='Batch size')
     parser.add_argument('--num-biased-samples', type=int, default=150)
     parser.add_argument('--bias-weight', type=int, default=4)
     parser.add_argument("--loss-type", type=str, default='l1', choices=('l1', 'l2'))
