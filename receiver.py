@@ -46,14 +46,17 @@ class SuperResolutionProcessor(ClassLogger):
                                    num_channels=3, num_features=args.model_num_features)
         self.load_pretrained = args.load_pretrained
         self.pretrained_fp = args.pretrained_fp
-        self.device = 'cuda' if not args.not_use_cuda else 'cpu'
+        self.device = 'cuda' if args.use_gpu else 'cpu'
 
         self._model_queue = queue.SimpleQueue()
 
         self._setup()
 
     def _setup(self):
-        self.model = self.model.half().to(self.device)
+        if self.device == 'cuda':
+            self.model = self.model.half().to(self.device)
+        else:
+            self.model = self.model.to(self.device)  # pytorch conv cpu version not support fp16
 
         # using pretrained model at receiver side is trivial (as it is replaced by new model in short time)
         if self.load_pretrained and self.pretrained_fp and os.path.exists(self.pretrained_fp):
@@ -70,7 +73,12 @@ class SuperResolutionProcessor(ClassLogger):
         self._update_model()
 
         x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3)
-        x = x.permute(2, 0, 1).half()  # (3, lr_height, lr_width)
+        x = x.permute(2, 0, 1)  # (3, lr_height, lr_width)
+        if self.device == 'cuda':
+            x = x.half()  # x.to(torch.float16)
+        else:
+            x = x.float()  # x.to(torch.float32)
+
         x.div_(255)
         x.unsqueeze_(0)  # (1, 3, lr_height, lr_width)
 
@@ -92,7 +100,7 @@ class SuperResolutionProcessor(ClassLogger):
             return
 
         m = self._model_queue.get_nowait()
-        while self._model_queue.qsize() > 0:
+        while self._model_queue.qsize() > 0:  # get the newest model
             m = self._model_queue.get_nowait()
         self.model.load_state_dict(torch.load(BytesIO(m)))
         self.log_info('update model')
@@ -152,7 +160,7 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
             recorder_sr.addTrack(VideoProcessTrack(relay.subscribe(track), processor))
         else:
             # Not consider audio at this stage
-            # recorder_raw.addTrack(track)  # add audio track to recorder_raw
+            # recorder_raw.addTrack(track)
             pass
 
     @pc.on('datachannel')
@@ -160,9 +168,10 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
         logger.info('Received data channel: %s', channel.label)
 
         if channel.label == 'model':
-            @channel.on('message')
-            def on_message(msg):
-                processor.model_queue.put(msg)
+            if isinstance(processor, SuperResolutionProcessor):
+                @channel.on('message')
+                def on_message(msg):
+                    processor.model_queue.put(msg)
         else:
             raise NotImplementedError
 
@@ -196,12 +205,14 @@ async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Conferencing peer (Receiver)')
-    parser.add_argument('--process-type', type=str, default='sr', choices=('sr', 'grayish', 'none'))
+    parser.add_argument('--not-sr', action='store_true', help='Not to perform per-frame super-resolution')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
+
+    # directory
     parser.add_argument('--log-dir', type=str, default='result/logs', help='Directory for logs')
+    parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
 
     # video
-    parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
     parser.add_argument('--record-sr-fn', type=str, default='sr.avi', help='SR video record name')
     parser.add_argument('--record-raw-fn', type=str, default='raw.avi', help='Raw video record name')
     parser.add_argument('--not-record-sr', action='store_true', help='Do not record SR video')
@@ -212,7 +223,7 @@ if __name__ == '__main__':
     parser.add_argument('--fps', type=int, default=30)
 
     # model
-    parser.add_argument('--not-use-cuda', action='store_true')
+    parser.add_argument('--use-gpu', action='store_true', help='Use GPU to infer. Strongly recommand to use GPU for deep network')
     parser.add_argument('--model-scale', type=int, default=2)
     parser.add_argument('--model-num-blocks', type=int, default=8)
     parser.add_argument('--model-num-features', type=int, default=8)
@@ -230,6 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--ice-provider', type=str, default='google', help='ICE server provider')
     args = parser.parse_args()
 
+    os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.record_dir, exist_ok=True)
 
     # logging settings
@@ -268,15 +280,11 @@ if __name__ == '__main__':
     else:
         recorder_sr = MediaBlackhole()
 
-    # inference
-    processor = None
-    if args.process_type == 'sr':
-        processor = SuperResolutionProcessor(args)
-    elif args.process_type == 'none':
+    # SR processor
+    if args.not_sr:
         processor = DummyProcessor()
     else:
-        logger.info(f'Process type "{args.process_type}" is not recognized. Exit.')
-        exit(0)
+        processor = SuperResolutionProcessor(args)
 
     # run receiver
     loop = asyncio.get_event_loop()
