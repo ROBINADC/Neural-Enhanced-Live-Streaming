@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 FILE_CSV = '../result/quality/temp.csv'
+SMOOTH_VALUE = 10  # group N data points and use their average
 
 df = pd.read_csv(FILE_CSV)
 
@@ -18,9 +19,9 @@ indices = np.array(df['index'])
 raws = np.array(df['raw'])
 srs = np.array(df['sr'])
 
-indices_smooth = indices[::5]
-seconds_smooth = indices_smooth / 5
-softing = lambda a: np.mean(np.reshape(a, (-1, 5)), axis=1)
+indices_smooth = indices[::SMOOTH_VALUE]
+seconds_smooth = indices_smooth / SMOOTH_VALUE
+softing = lambda a: np.mean(np.reshape(a, (-1, SMOOTH_VALUE)), axis=1)
 raws_smooth = softing(raws)
 srs_smooth = softing(srs)
 
@@ -35,4 +36,4 @@ plt.ylabel('PSNR')
 
 plt.legend()
 # plt.show()
-plt.savefig('result/quality/temp.eps')
+plt.savefig('../result/quality/temp.eps')
