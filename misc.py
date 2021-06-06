@@ -116,6 +116,8 @@ def frame_to_jpeg(frame: VideoFrame):
 
 
 def cal_psnr(pred, true, max_val):
+    pred = pred.astype(np.int32)  # convert to int32 in case the array is uint8
+    true = true.astype(np.int32)
     mse = np.mean((pred - true) ** 2)
     if mse == 0:
         return 100
