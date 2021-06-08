@@ -27,7 +27,7 @@ qs = [23.49, 23.71, 24.24, 24.49, 24.80, 24.97]  # quality in PSNR
 fig, ax1 = plt.subplots(figsize=(4, 3))
 
 color = 'tab:red'
-ax1.set_xlabel(r'Patch Frequency ($\mathregular{s^{-1}}$)')
+ax1.set_xlabel(r'Patch Frequency (Hz)')
 ax1.set_ylabel('Patch Bandwidth Usage (kbps)')
 ax1.plot(pfs, bws, color=color, label='Bandwidth', linewidth=2)
 

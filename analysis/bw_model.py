@@ -21,7 +21,7 @@ qs = [24.53, 24.56, 24.62, 24.73, 24.97]
 fig, ax1 = plt.subplots(figsize=(4, 3))
 
 color = 'tab:red'
-ax1.set_xlabel(r'Model Frequency ($\mathregular{s^{-1}}$)')
+ax1.set_xlabel(r'Model Frequency (Hz)')
 ax1.set_ylabel('Model Bandwidth Usage (kbps)')
 ax1.plot(mfs, bws, color=color, label='Bandwidth', linewidth=2)
 

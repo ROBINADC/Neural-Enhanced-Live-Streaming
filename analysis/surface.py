@@ -44,8 +44,8 @@ plt.yticks(mfs)
 ax.xaxis.set_rotate_label(False)
 ax.yaxis.set_rotate_label(False)
 ax.zaxis.set_rotate_label(False)
-ax.set_xlabel(r'Patch Frequency ($\mathregular{s^{-1}}$)', rotation=22)
-ax.set_ylabel(r'Model Frequency ($\mathregular{s^{-1}}$)', rotation=-21)
+ax.set_xlabel(r'Patch Frequency (Hz)', rotation=22)  # $\mathregular{s^{-1}}$
+ax.set_ylabel(r'Model Frequency (Hz)', rotation=-21)
 ax.set_zlabel('Average PSNR (dB)', rotation=90)
 
 # for legend
