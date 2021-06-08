@@ -20,9 +20,9 @@ FILE_FIG = '../result/quality/temp_bw_patch.svg'
 
 PATCH_SIZE = 21.36  # average patch size in kbits (2670 bytes)
 
-pfs = [1, 3, 5, 7, 10, 20]  # patch frequency
+pfs = [1, 5, 7, 10, 15, 20]  # patch frequency
 bws = [pf * PATCH_SIZE for pf in pfs]  # bandwidth
-qs = [23.49, 23.71, 24.24, 24.49, 24.80, 24.97]  # quality in PSNR
+qs = [24.53, 24.56, 24.59, 24.62, 24.85, 24.97]  # quality in PSNR
 
 fig, ax1 = plt.subplots(figsize=(4, 3))
 
@@ -39,7 +39,7 @@ ax2.set_ylabel('PSNR (dB)')
 
 plt.xticks(range(0, 21, 5))
 ax1.set_yticks(range(0, 501, 100))
-ax2.set_yticks(np.arange(23, 25.1, 0.5))
+ax2.set_yticks(np.arange(24, 25.1, 0.5))
 
 line_1, label_1 = ax1.get_legend_handles_labels()
 line_2, label_2 = ax2.get_legend_handles_labels()

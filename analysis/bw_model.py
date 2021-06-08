@@ -16,7 +16,7 @@ MODEL_SIZE = 521.2  # average model size in kbits (estimated 65156 bytes)
 
 mfs = [0.05, 0.1, 0.15, 0.175, 0.2]
 bws = [mf * MODEL_SIZE for mf in mfs]
-qs = [24.53, 24.56, 24.62, 24.73, 24.97]
+qs = [23.49, 24.24, 24.80, 24.89, 24.97]
 
 fig, ax1 = plt.subplots(figsize=(4, 3))
 
@@ -33,7 +33,7 @@ ax2.set_ylabel('PSNR (dB)')
 
 plt.xticks(np.arange(0.05, 0.21, 0.05))
 ax1.set_yticks(range(20, 110, 20))
-ax2.set_yticks(np.arange(24, 25.1, 0.5))
+ax2.set_yticks(np.arange(23, 25.1, 0.5))
 
 line_1, label_1 = ax1.get_legend_handles_labels()
 line_2, label_2 = ax2.get_legend_handles_labels()
