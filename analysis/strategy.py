@@ -1,6 +1,6 @@
 """
-This is used to 
-refer:
+Plot PSNR gain over different optimization strategies.
+
 Created on 2021/6/7 
 """
 
@@ -57,6 +57,7 @@ ax.plot(mins_smooth, p1b1, label='PSNR Filter + Biased Sampling')
 ax.plot(mins_smooth, p1b0, label='PSNR Filter only')
 ax.plot(mins_smooth, p0b1, label='Biased Sampling only')
 ax.plot(mins_smooth, p0b0, label='None of above applied')
+plt.axhline(y=0, color='gray', alpha=0.3, ls='-', linewidth=0.5)
 
 ax.xaxis.set_major_locator(plt.MultipleLocator(1))
 # ax.xaxis.set_minor_locator(plt.MultipleLocator(20))
@@ -67,4 +68,4 @@ plt.ylabel('PSNR Gain (dB)')
 plt.legend()
 
 # plt.show()
-plt.savefig(FILE_FIG, pad_inches=0.0)
+plt.savefig(FILE_FIG, bbox_inches='tight', pad_inches=0.02)
