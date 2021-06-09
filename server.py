@@ -165,7 +165,10 @@ class OnlineTrainer(ClassLogger):
         self.load_pretrained = args.load_pretrained
         self.pretrained_fp = args.pretrained_fp
 
+        self.training_pattern = args.training_pattern  # choose from 'intermittent' and 'unceasing'
+
         self.duration_per_epoch = args.duration_per_epoch
+        self.eps = 0.01  # (only used in unceasing training)
         self.batch_size = args.batch_size
         self.learning_rate = args.learning_rate
         self.device = 'cuda' if args.use_gpu else 'cpu'
@@ -182,7 +185,9 @@ class OnlineTrainer(ClassLogger):
         self.ckpt_dir = args.ckpt_dir
 
         self.epoch = 0
-        self.pending_patches = []
+        self._epoch_start_time = None
+
+        self._pending_patches = []
 
         self._setup()
 
@@ -193,6 +198,7 @@ class OnlineTrainer(ClassLogger):
             self.log_info('load pretrained model')
         self.model.train()
 
+        self.log_info(f'training pattern has been set to {self.training_pattern}')
         self.log_info('finish setup')
 
     def run(self):
@@ -200,7 +206,7 @@ class OnlineTrainer(ClassLogger):
         fetch_thread.start()
 
         try:
-            while not self.pending_patches:
+            while not self._pending_patches:
                 time.sleep(1)
         except KeyboardInterrupt:
             self.log_info('interrupt while waiting the first batch of training patches')
@@ -210,34 +216,26 @@ class OnlineTrainer(ClassLogger):
 
         try:
             while True:
-                epoch_start_time = time.time()
+                self._epoch_start_time = time.time()  # update epoch start time
 
-                self.extend_dataset()
-                self.train_one_epoch()
-                self.on_model_ready()
-
-                if self.duration_per_epoch is not None:
-                    elapse = time.time() - epoch_start_time
-                    if elapse < self.duration_per_epoch:
-                        self.log_debug(f'current epoch duration {elapse:.2f}')
-                        time.sleep(self.duration_per_epoch - elapse)
-                    else:
-                        self.log_warning(f'current epoch duration {elapse:.2f} is greater than {self.duration_per_epoch}')
+                if self.training_pattern == 'unceasing':
+                    self._unceasing_train()
+                else:
+                    self._intermittent_train()
         except KeyboardInterrupt:
             self.log_info('keyboard interrupt training')
         # fetch_thread.join()
 
-    def extend_dataset(self):
-        size = len(self.pending_patches)
-        self.log_debug(f'extend {size} patches')
-        if size == 0:
-            return
+    def _intermittent_train(self):
+        """
+        Train the model intermittently.
+        If the epoch duration is shorter than the prescribed duration,
+        the process wait until that much time.
+        Then it starts next epoch.
+        """
 
-        self.dataset.extend(self.pending_patches[:size])
-        del self.pending_patches[:size]
-
-    def train_one_epoch(self):
         self.model.train()
+        self._extend_dataset()
 
         for iteration, (x, y) in enumerate(self.dataloader):
             x, y = x.to(self.device), y.to(self.device)  # (*, 3, patch_height, patch_width)
@@ -253,7 +251,61 @@ class OnlineTrainer(ClassLogger):
         self.epoch += 1
         self.log_info(f'finish training epoch {self.epoch}')
 
-    def on_model_ready(self):
+        self._on_model_ready()
+
+        if self.duration_per_epoch is not None:
+            elapse = time.time() - self._epoch_start_time
+            if elapse < self.duration_per_epoch:
+                self.log_debug(f'current epoch duration {elapse:.2f}')
+                time.sleep(self.duration_per_epoch - elapse)
+            else:
+                self.log_warning(f'current epoch duration {elapse:.2f} is greater than {self.duration_per_epoch}')
+
+    def _unceasing_train(self):
+        """
+        Train the model unceasingly.
+        The model keeps training until the time hits the prescribed epoch duration.
+        We say such an iteration a main epoch,
+        while the iteration indicated by the dataloader object is called a sub-epoch.
+
+        This training pattern certainly outperforms the intermittent one.
+        It is at the cost of computational resources.
+        """
+        assert self._epoch_start_time is not None and self.duration_per_epoch > 0
+
+        self.model.train()
+        while True:  # iteration indicated by dataloader
+            self._extend_dataset()  # extend dataset on the start of every sub-epoch
+
+            for iteration, (x, y) in enumerate(self.dataloader):  # iterate a sub-epoch
+                if time.time() - self._epoch_start_time > self.duration_per_epoch - self.eps:
+                    break
+                x, y = x.to(self.device), y.to(self.device)  # (*, 3, patch_height, patch_width)
+
+                self.optimizer.zero_grad()
+                loss = self.loss_func(self.model(x), y)
+                loss.backward()
+                self.optimizer.step()
+
+                if iteration % 10 == 0:
+                    self.log_debug(f'{iteration} {loss.item()}')
+            else:
+                continue
+            break
+
+        self._on_model_ready()
+        self.log_debug(f'current epoch duration {time.time() - self._epoch_start_time:.2f}')
+
+    def _extend_dataset(self):
+        size = len(self._pending_patches)
+        self.log_debug(f'extend {size} patches')
+        if size == 0:
+            return
+
+        self.dataset.extend(self._pending_patches[:size])
+        del self._pending_patches[:size]
+
+    def _on_model_ready(self):
         # convert the trained model to bytes and put it to model_queue
         buffer = BytesIO()
         torch.save(self.model.state_dict(), buffer)
@@ -275,10 +327,10 @@ class OnlineTrainer(ClassLogger):
     def _fetching_patch(self):
         while True:
             patch = self.patch_queue.get()  # (hr_patch, lr_patch)
-            self.pending_patches.append((patch[1], patch[0]))  # (lr_patch, hr_patch)
+            self._pending_patches.append((patch[1], patch[0]))  # (lr_patch, hr_patch)
         # while True:
         #     try:
-        #         self.pending_patches.append(self.patch_queue.get())
+        #         self._pending_patches.append(self.patch_queue.get())
         #     except (KeyboardInterrupt, SystemExit, EOFError) as exc:
         #         self.__log_info(exc)
         #         break
@@ -427,6 +479,7 @@ if __name__ == '__main__':
 
     # train
     parser.add_argument('--use-gpu', action='store_true', help='Use GPU to train. Default for using CPU.')
+    parser.add_argument('--training-pattern', type=str, default='intermittent', choices=('intermittent', 'unceasing'))
     parser.add_argument('--save-ckpt', action='store_true', help='Save training checkpoints to local if set')
     parser.add_argument('--duration-per-epoch', type=float, default=5, help='The training thread will pause until the epoch takes certain duration')
     parser.add_argument('--num-items-per-epoch', type=int, default=3000, help='The number of training items per epoch')
