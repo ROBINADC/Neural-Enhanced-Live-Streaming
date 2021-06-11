@@ -5,13 +5,8 @@ __pycache__/
 data/
 result/
 
-*.mp4
-*.jpg
-*.png
-
-*.log
-*.pt
-
 temp/
 try.py
-logger.py
+
+# Retain sample videos
+!data/video/dana_480p_30fps.mp4
