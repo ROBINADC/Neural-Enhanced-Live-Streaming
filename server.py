@@ -1,5 +1,9 @@
 """
-Video conferencing server
+Real-time video streaming server
+- relay video from sender to receiver
+- receive training patches from sender
+- train super-resolution model in another process
+- deliver fresh models to receiver
 """
 
 __author__ = "Yihang Wu"
@@ -13,7 +17,6 @@ import threading
 import time
 import asyncio
 
-# import numpy as np
 # import cv2
 import torch
 import torch.nn as nn
@@ -28,7 +31,7 @@ from aiortc.contrib.signaling import TcpSocketSignaling, BYE
 from media import MediaRelay
 from model import SingleNetwork
 from dataset import RecentBiasDataset
-from misc import get_ice_servers, ClassLogger, Patch, bytes_to_ndarray
+from misc import ClassLogger, Patch, bytes_to_ndarray, get_ice_servers
 
 logger = logging.getLogger('server')
 relay = MediaRelay()  # a media source that relays one or more tracks to multiple consumers.
@@ -145,7 +148,7 @@ class TrackScheduler(ClassLogger):
 
 def run_trainer(patch_queue, model_queue, args):
     """
-    This function is run in another process.
+    This function is invoked in another process to run the trainer
     """
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)  # setup logging
 
@@ -224,11 +227,10 @@ class OnlineTrainer(ClassLogger):
                     self._intermittent_train()
         except KeyboardInterrupt:
             self.log_info('keyboard interrupt training')
-        # fetch_thread.join()
 
     def _intermittent_train(self):
         """
-        Train the model intermittently.
+        Train one epoch of the model intermittently.
         If the epoch duration is shorter than the prescribed duration,
         the process wait until that much time.
         Then it starts next epoch.
@@ -263,7 +265,7 @@ class OnlineTrainer(ClassLogger):
 
     def _unceasing_train(self):
         """
-        Train the model unceasingly.
+        Train one epoch of the model unceasingly.
         The model keeps training until the time hits the prescribed epoch duration.
         We say such an iteration a main epoch,
         while the iteration indicated by the dataloader object is called a sub-epoch.
@@ -347,13 +349,19 @@ class OnlineTrainer(ClassLogger):
 async def comm_sender(pc, signaling, patch_queue, track_scheduler):
     """
     Communicates with sender
+
+    Args:
+        pc (RTCPeerConnection): peer connection object
+        signaling (): signaling object
+        patch_queue (mp.Queue): multiprocessing queue that is used to place the training patches
+        track_scheduler (TrackScheduler):
     """
 
     def log_info(msg, *args):
-        logger.info(f'@Sender {msg}', *args)
+        logger.info(f'@Sender: {msg}', *args)
 
     await signaling.connect()
-    log_info('Signaling connected')
+    log_info('signaling connected')
 
     pc.addTransceiver('video', direction='recvonly')
     pc.addTransceiver('audio', direction='recvonly')
@@ -363,10 +371,10 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
         """
         Callback function for receiving track from client
         """
-        log_info(f'Received {track.kind} track')
+        log_info(f'received {track.kind} track')
         if track.kind == 'video':
             track_scheduler.set_track(relay.subscribe(track))  # track not works
-            log_info('Got track from sender')
+            log_info('got track from sender')
             asyncio.create_task(track_scheduler.start_consuming())  # start consuming frames
         else:
             # Not consider audio at this stage
@@ -390,6 +398,7 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
         hr_array = bytes_to_ndarray(hr_bytes)
         lr_array = bytes_to_ndarray(lr_bytes)
         patch_queue.put((hr_array, lr_array))
+        # If you want to generate offline training data
         # cv2.imwrite(f'data/360p/{i:04d}_lr.png', lr_array)
         # cv2.imwrite(f'data/720p/{i:04d}_hr.png', hr_array)
         i += 1
@@ -406,33 +415,43 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
         obj = await signaling.receive()
 
         if isinstance(obj, RTCSessionDescription):
-            log_info('Received remote description')
+            log_info('received remote description')
             await pc.setRemoteDescription(obj)
         elif isinstance(obj, RTCIceCandidate):
-            log_info('Received remote candidate')
+            log_info('received remote candidate')
             await pc.addIceCandidate(obj)
         elif obj is BYE:
-            log_info('Exiting')
+            log_info('exiting')
             break
 
 
 async def comm_receiver(pc, signaling, model_queue, track_scheduler):
+    """
+    Communicate with receiver
+
+    Args:
+        pc (RTCPeerConnection): peer connection
+        signaling (): signaling object
+        model_queue (mp.Queue): multiprocessing queue that is used to place SR models
+        track_scheduler (TrackScheduler):
+
+    Returns:
+
+    """
     def log_info(msg):
         logger.info(f'@Receiver {msg}')
 
     await signaling.connect()
-    log_info('Signaling connected')
+    log_info('signaling connected')
 
     track = await track_scheduler.get_track()
-
-    pc.addTrack(track)  # work
-    # pc.addTrack(relay.subscribe(track))
+    pc.addTrack(track)
     log_info('Set track for receiver')
 
     # model channel
-    model_transmitter = ModelTransmitter(model_queue)
-
     model_channel = pc.createDataChannel('model')
+
+    model_transmitter = ModelTransmitter(model_queue)
     model_transmitter.model_channel = model_channel
 
     @model_channel.on('open')
@@ -453,19 +472,19 @@ async def comm_receiver(pc, signaling, model_queue, track_scheduler):
         obj = await signaling.receive()
 
         if isinstance(obj, RTCSessionDescription):
-            log_info('Received remote description')
+            log_info('received remote description')
             await pc.setRemoteDescription(obj)
             track_scheduler.stop_consuming()  # stop consuming frames
         elif isinstance(obj, RTCIceCandidate):
-            log_info('Received remote candidate')
+            log_info('received remote candidate')
             await pc.addIceCandidate(obj)
         elif obj is BYE:
-            log_info('Exiting')
+            log_info('exiting')
             break
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Ingest server (offer peer)')
+    parser = argparse.ArgumentParser(description='Real-time video streaming server')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
     # directory
@@ -497,7 +516,7 @@ if __name__ == '__main__':
     parser.add_argument('--signaling-port-receiver', type=int, default=10001, help='TCP socket signaling port for receiver side')
 
     # ICE server
-    parser.add_argument('--ice-config', type=str, help='ICE server configuration')
+    parser.add_argument('--ice-config', type=str, help='ICE server configuration (json file)')
     parser.add_argument('--ice-provider', type=str, default='google', help='ICE server provider')
     args = parser.parse_args()
 
