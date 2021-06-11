@@ -1,6 +1,7 @@
 """
-Video conferencing sender peer
-However, the distinction of sender peer and receiver peer should be merged someday.
+Real-time video streaming sender
+- send video to server
+- send training patches to server
 """
 
 __author__ = "Yihang Wu"
@@ -16,7 +17,6 @@ import platform
 import asyncio
 
 import numpy as np
-# from av import VideoFrame
 import cv2
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCConfiguration
@@ -136,7 +136,7 @@ class PatchTransmitter(ClassLogger):
         - deliver training patch to RTC's data channel
 
         Args:
-            patch_sampler (): patch sampler instance
+            patch_sampler (PatchSampler): patch sampler instance
             sample_freq (float): the frequency of sampling patches
             sample_num (int): the number of patches that each sampling process gets
         """
@@ -215,8 +215,8 @@ async def run_sender(pc: RTCPeerConnection, signaling, audio, video, patch_trans
         else:
             raise NotImplementedError
 
-    # connect signaling
     await signaling.connect()
+
     # consume signaling
     while True:
         try:
@@ -259,7 +259,7 @@ def get_device_list_dshow():
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Conferencing peer (Sender)')
+    parser = argparse.ArgumentParser(description='Real-time video streaming sender')
     parser.add_argument('--debug', action='store_true', help='Set the logging verbosity to DEBUG')
 
     # camera
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     parser.add_argument('--patch-sampling-num', type=int, default=10, help='the number of patches that each sampling process gets')
 
     # signaling
-    parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')  # 192.168.0.201
+    parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')
     parser.add_argument('--signaling-port', type=int, default=9999, help='TCP socket signaling port')
 
     # ICE server
@@ -318,8 +318,9 @@ if __name__ == '__main__':
                                          sample_freq=args.patch_sampling_frequency,
                                          sample_num=args.patch_sampling_num)
 
-    # framerate degradation
     """
+    Framerate degradation
+    
     When the capability of the receiving device is insufficient,
     degrade the framerate of the original stream with level FR_DEG.
     Sample 1 frame every FR_DEG frames.

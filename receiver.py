@@ -1,10 +1,8 @@
 """
-Video conferencing receiver peer.
-Reciever has following functionality
-- receives raw video from server
+Real-time video streaming receiver
+- receive raw video from server
+- receive SR models from server
 - applies per-frame super-resolution and displays (stores at this stage) the high-resolution video
-
-However, the distinction of sender peer and receiver peer should be merged someday.
 """
 
 __author__ = "Yihang Wu"
@@ -19,7 +17,6 @@ import queue
 
 import numpy as np
 from av import VideoFrame
-# import cv2
 import torch
 
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, MediaStreamTrack, RTCConfiguration
@@ -213,8 +210,8 @@ if __name__ == '__main__':
     parser.add_argument('--record-dir', type=str, default='result/records', help='Directory for media records')
 
     # video
-    parser.add_argument('--record-sr-fn', type=str, default='sr.avi', help='SR video record name')
-    parser.add_argument('--record-raw-fn', type=str, default='raw.avi', help='Raw video record name')
+    parser.add_argument('--record-sr-fn', type=str, default='sr.mp4', help='SR video record name')
+    parser.add_argument('--record-raw-fn', type=str, default='raw.mp4', help='Raw video record name')
     parser.add_argument('--not-record-sr', action='store_true', help='Do not record SR video')
     parser.add_argument('--not-record-raw', action='store_true', help='Do not record raw video')
     parser.add_argument('--aspect-ratio', type=str, default='4x3', help='Aspect ratio of the video given in "[W]x[H]"')
@@ -294,7 +291,7 @@ if __name__ == '__main__':
         logger.info('keyboard interrupt while running receiver')
     finally:
         # cleanup
-        loop.run_until_complete(recorder_raw.stop())  # work
+        loop.run_until_complete(recorder_raw.stop())
         loop.run_until_complete(recorder_sr.stop())
         loop.run_until_complete(signaling.close())
         loop.run_until_complete(pc.close())  # pc closes then no track
