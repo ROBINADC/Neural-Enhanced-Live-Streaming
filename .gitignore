@@ -2,11 +2,13 @@ __pycache__/
 
 .idea/
 
+data/*
+# Retain sample videos
+!data/video
 data/video/*
+!data/video/dana_480p_30fps.mp4
+
 result/
 
 temp/
 try.py
-
-# Retain sample videos
-!data/video/dana_480p_30fps.mp4
