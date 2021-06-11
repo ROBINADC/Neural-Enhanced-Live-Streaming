@@ -4,16 +4,11 @@ Dataset classes for neural network.
 
 __author__ = "Yihang Wu"
 
-import glob
 import logging
 
-import cv2
 import numpy as np
-import torch
 from torch.utils.data.dataset import Dataset
 from torchvision.transforms import Compose, ToTensor
-
-from misc import alphanum
 
 logger = logging.getLogger(__name__)
 
@@ -125,87 +120,33 @@ class RecentBiasDataset(ExtendableDataset):
             self.prob = [old for _ in range(self.size - self.num_biased_samples)] + [new for _ in range(self.num_biased_samples)]
 
 
-class FixedDataset(Dataset):
-    transform = Compose([ToTensor(), ])
-
-    def __init__(self, lr_dir, hr_dir):
-        super().__init__()
-
-        self.lr_dir = lr_dir
-        self.hr_dir = hr_dir
-
-        self.lr_filenames = []
-        self.hr_filenames = []
-
-        self._setup()
-
-    def _setup(self):
-        self.lr_filenames.extend(glob.glob(f'{self.lr_dir}/*.png'))
-        self.lr_filenames.sort(key=alphanum)
-
-        self.hr_filenames.extend(glob.glob(f'{self.hr_dir}/*.png'))
-        self.hr_filenames.sort(key=alphanum)
-
-        self.lr_patches = [cv2.imread(fn) for fn in self.lr_filenames]
-        self.hr_patches = [cv2.imread(fn) for fn in self.hr_filenames]
-
-        assert len(self.lr_patches) == len(self.hr_patches)
-
-    def __len__(self):
-        return len(self.lr_filenames)
-
-    def __getitem__(self, item):
-        x = self.lr_patches[item]
-        y = self.hr_patches[item]
-
-        x_tensor = self.transform(x)
-        y_tensor = self.transform(y)
-
-        return x_tensor, y_tensor
-
-
-class DummyDataset(Dataset):
-    """
-    A dummy dataset that trivial data
-    """
-
-    def __init__(self, total=100):
-        super(DummyDataset, self).__init__()
-
-        self.total = total
-
-    def __getitem__(self, index):
-        x = torch.rand(3, 360, 640)
-        y = torch.rand(3, 720, 1280)
-        return x, y
-
-    def __len__(self):
-        return self.total
-
-
 if __name__ == '__main__':
     from torch.utils.data.dataloader import DataLoader
 
     ExtendableDataset.transform = lambda x: x
-    # dataset = ExtendableDataset(50)
-    # dataloader = DataLoader(dataset, batch_size=20)
-    # for i in range(10):  # 10 iters
-    #     dataset.extend([(i, i) for _ in range(20)])
-    #     print('new epoch')
-    #     for x, y in dataloader:
-    #         print(x)
 
-    dataset = RecentBiasDataset(50, 20, 4)
+    """
+    Codes for testing ExtendableDataset
+    """
+    print(f'\nTest ExtendableDatase:')
+    dataset = ExtendableDataset(50)
     dataloader = DataLoader(dataset, batch_size=20)
-    for i in range(10):  # 10 iters
+    for i in range(10):
         dataset.extend([(i, i) for _ in range(20)])
-        print('new epoch')
+        print(f'epoch - {i}')
         for x, y in dataloader:
             print(x)
+        print()
 
-    # dataset = FixedDataset('data/360p', 'data/1080p')
-    # dataloader = DataLoader(dataset, batch_size=64)
-    #
-    # for x, y in dataloader:
-    #     print(x.shape, y.shape)
-    #     break
+    """
+    Codes for testing RecentBiasDataset
+    """
+    print(f'\nTest RecenBiasDataset:')
+    dataset = RecentBiasDataset(50, 20, 4)
+    dataloader = DataLoader(dataset, batch_size=20)
+    for i in range(10):
+        dataset.extend([(i, i) for _ in range(20)])
+        print(f'epoch - {i}')
+        for x, y in dataloader:
+            print(x)
+        print()

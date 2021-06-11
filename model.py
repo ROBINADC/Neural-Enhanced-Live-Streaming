@@ -1,17 +1,31 @@
 """
-Neural networks and functional modules
+Single-scale super-resolution neural model and the internal functional modules.
+The model is adapted from NAS
+
+References: https://github.com/kaist-ina/NAS_public
 """
 
 __author__ = "Yihang Wu"
 
-import torch.nn as nn
 import math
 
-VALID_SCALES = (1, 2, 3, 4)
+import torch.nn as nn
 
 
 class SingleNetwork(nn.Module):
+    VALID_SCALES = (1, 2, 3, 4)
+
     def __init__(self, scale, num_blocks, num_channels, num_features, bias=True, activation=nn.ReLU(True)):
+        """
+
+        Args:
+            scale (int): up-scaling factor. The width of hr image is scale times than lr image
+            num_blocks (int): the number of residual blocks
+            num_channels (int): the number of channels in an image
+            num_features (int): the number of channels used throughout convolutional computations
+            bias (bool): add bias or not
+            activation (nn.Module): activate function
+        """
         super(SingleNetwork, self).__init__()
 
         self.scale = scale
@@ -19,7 +33,7 @@ class SingleNetwork(nn.Module):
         self.num_channels = num_channels
         self.num_features = num_features
 
-        assert self.scale in VALID_SCALES
+        assert self.scale in SingleNetwork.VALID_SCALES
 
         # No early-exit implemented
 
@@ -121,18 +135,3 @@ class Upsampler(nn.Module):
 
     def forward(self, x):
         return self.upsampler(x)
-
-
-if __name__ == '__main__':
-    from torch.utils.data.dataloader import DataLoader
-    from dataset import DummyDataset
-
-    model = SingleNetwork(2, 6, 3, 6)
-
-    model.to('cuda')
-    for i, (xs, ys) in enumerate(DataLoader(DummyDataset(), 4)):
-        xs, ys = xs.to('cuda'), ys.to('cuda')
-
-        outs = model(xs)
-        print(xs.size(), ys.size(), outs.size())
-        break

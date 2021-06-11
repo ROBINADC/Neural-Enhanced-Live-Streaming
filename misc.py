@@ -1,17 +1,14 @@
 """
-Miscellany
+Miscellany.
+Most are the functions or classes shared across different files.
 """
 
 __author__ = "Yihang Wu"
 
-import re
 import json
-import time
-from datetime import timedelta
 import math
 from fractions import Fraction
 import logging
-from collections import namedtuple
 import asyncio
 from typing import List
 
@@ -19,33 +16,6 @@ import numpy as np
 from av import VideoFrame
 import cv2
 from aiortc import RTCIceServer
-
-
-def get_ice_servers(file: str = None, provider: str = None) -> List[RTCIceServer]:
-    """
-    Get a list of ICE servers that configures STUN / TURN servers from given json file,
-    or an empty list if file is not provided.
-
-    Args:
-        file (): file that contains the server information
-        provider (): the provider of the ICE servers
-
-    Returns:
-        A list of RTCIceServer objects.
-    """
-    if file is None:
-        return list()
-
-    with open(file, 'r') as fin:
-        a = json.load(fin)
-
-    if provider is None or provider not in a.keys():
-        raise KeyError(f'Unrecognized provider: {provider}')
-
-    server_list = a[provider]
-    ice_servers = [RTCIceServer(**sv) for sv in server_list]
-
-    return ice_servers
 
 
 class ClassLogger:
@@ -64,6 +34,10 @@ class ClassLogger:
 
 
 class MostRecentSlot:
+    """
+    A most-recent slot (a container with only one space) implemented in coroutine context
+    """
+
     def __init__(self):
         self._queue = asyncio.Queue(maxsize=1)
 
@@ -77,52 +51,15 @@ class MostRecentSlot:
 
 
 class Patch:
+    """
+    Patch context
+    """
+
     def __init__(self, hr_patch=None, lr_patch=None, timestamp=None, loc=None):
         self.hr_patch = hr_patch
         self.lr_patch = lr_patch
         self.timestamp = timestamp
         self.loc = loc
-
-
-def frame_to_ndarray(frame: VideoFrame) -> np.ndarray:
-    return frame.to_ndarray(format='bgr24')  # (height, width, 3: BGR) np.uint8
-
-
-def ndarray_to_bytes(a: np.ndarray) -> bytes:
-    return cv2.imencode('.jpg', a, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
-
-
-def frame_to_bytes(frame: VideoFrame) -> bytes:
-    ndarray = frame.to_ndarray(format='bgr24')  # (height, width, 3: BGR) np.uint8
-    _bytes = cv2.imencode('.jpg', ndarray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
-    return _bytes
-
-
-def bytes_to_ndarray(b: bytes) -> np.ndarray:
-    return cv2.imdecode(np.frombuffer(b, dtype=np.uint8), cv2.IMREAD_COLOR)
-
-
-def frame_to_jpeg(frame: VideoFrame):
-    """
-    indicator
-    """
-    ndarray = frame.to_ndarray(format='bgr24')  # 'uint8'
-    # ndarray = cv2.imread('g.png')
-    cv2.imwrite('a.jpg', ndarray)
-    enc_img = cv2.imencode('.jpg', ndarray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
-
-    dec_img = cv2.imdecode(np.frombuffer(enc_img, dtype=np.uint8), cv2.IMREAD_COLOR)
-    cv2.imwrite('b.jpg', dec_img)
-
-
-def cal_psnr(pred, true, max_val):
-    pred = pred.astype(np.int32)  # convert to int32 in case the array is uint8
-    true = true.astype(np.int32)
-    mse = np.mean((pred - true) ** 2)
-    if mse == 0:
-        return 100
-    else:
-        return 20 * math.log10(max_val / math.sqrt(mse))
 
 
 class Resolution:
@@ -158,46 +95,78 @@ class Resolution:
         return self._height
 
 
-def atoi(text):
-    return int(text) if text.isdigit() else text
+"""
+Frame related utilities
+"""
 
 
-def alphanum(text):
+def frame_to_ndarray(frame: VideoFrame) -> np.ndarray:
+    return frame.to_ndarray(format='bgr24')  # (height, width, 3: BGR) np.uint8
+
+
+def ndarray_to_bytes(a: np.ndarray) -> bytes:
+    return cv2.imencode('.jpg', a, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
+
+
+def frame_to_bytes(frame: VideoFrame) -> bytes:
+    ndarray = frame.to_ndarray(format='bgr24')  # (height, width, 3: BGR) np.uint8
+    _bytes = cv2.imencode('.jpg', ndarray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
+    return _bytes
+
+
+def bytes_to_ndarray(b: bytes) -> np.ndarray:
+    return cv2.imdecode(np.frombuffer(b, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+
+def frame_to_jpeg(frame: VideoFrame):
     """
-    alist.sort(key=natural_keys) sorts in human order
-    http://nedbatchelder.com/blog/200712/human_sorting.html
-    (See Toothy's implementation in the comments)
+    indicator
     """
-    return [atoi(c) for c in re.split(r'(\d+)', text)]
+    ndarray = frame.to_ndarray(format='bgr24')  # 'uint8'
+    # ndarray = cv2.imread('g.png')
+    cv2.imwrite('a.jpg', ndarray)
+    enc_img = cv2.imencode('.jpg', ndarray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
+
+    dec_img = cv2.imdecode(np.frombuffer(enc_img, dtype=np.uint8), cv2.IMREAD_COLOR)
+    cv2.imwrite('b.jpg', dec_img)
 
 
-class Timer:
-    def __init__(self):
-        self._start_time = None
-        self._stop_time = None
-
-    def start(self):
-        self._start_time = time.time()
-
-    def stop(self):
-        self._stop_time = time.time()
-
-    def tok(self):
-        return timedelta(seconds=int(time.time() - self._start_time))
-
-    def get_duration(self):
-        return timedelta(seconds=int(self._stop_time - self._start_time))
-
-
-def ffmpeg_run():
+def cal_psnr(pred, true, max_val):
     """
-    Handy function for using python bindings for FFmpeg
-
-    References: https://kkroening.github.io/ffmpeg-python/
+    Calculate peak signal-to-noise ratio (PSNR)
     """
-    import ffmpeg
-    ffmpeg.input('.mp4').trim(start=0, end=3).filter('fps', fps=5, round='up').output('out.mp4').run()
+    pred = pred.astype(np.int32)  # convert to int32 in case the array is uint8
+    true = true.astype(np.int32)
+
+    mse = np.mean((pred - true) ** 2)
+    if mse == 0:
+        return 100
+    else:
+        return 20 * math.log10(max_val / math.sqrt(mse))
 
 
-if __name__ == '__main__':
-    pass
+def get_ice_servers(file: str = None, provider: str = None) -> List[RTCIceServer]:
+    """
+    Get a list of ICE servers that configures STUN / TURN servers from given json file,
+    or an empty list if file is not provided.
+
+    Args:
+        file (): file that contains the server information
+        provider (): the provider of the ICE servers
+
+    Returns:
+        A list of RTCIceServer objects.
+    """
+    if file is None:
+        return list()
+
+    with open(file, 'r') as fin:
+        a = json.load(fin)
+
+    if provider is None or provider not in a.keys():
+        raise KeyError(f'Unrecognized provider: {provider}')
+
+    server_list = a[provider]
+    ice_servers = [RTCIceServer(**sv) for sv in server_list]
+
+    return ice_servers
