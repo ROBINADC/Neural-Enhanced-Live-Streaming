@@ -80,12 +80,12 @@ class SuperResolutionProcessor(ClassLogger):
         x.unsqueeze_(0)  # (1, 3, lr_height, lr_width)
 
         out = self.model(x)  # (1, 3, hr_height, hr_width)
-        out = out.data[0].permute(1, 2, 0)
+        out = out.data[0].permute(1, 2, 0)  # (hr_height, hr_width, 3)
         out = out * 255
         out = torch.clamp(out, 0, 255)
         out = out.byte()
 
-        hr_image = out.cpu().numpy()
+        hr_image = out.cpu().numpy()  # (hr_height, hr_width, 3)
         return hr_image
 
     def _update_model(self):
