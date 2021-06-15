@@ -6,7 +6,7 @@ data/*
 # Retain sample videos
 !data/video
 data/video/*
-!data/video/dana_480p_30fps.mp4
+!data/video/news_480p_30fps.mp4
 
 result/
 

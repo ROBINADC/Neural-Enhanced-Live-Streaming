@@ -17,7 +17,7 @@ DIR_QUALITY = '../result/quality'
 DIR_FRAMES = '../result/frames'
 
 FILE_FRAME_CONSUME = '../result/logs/server_consume_frame.log'
-FILE_VIDEO_SRC = '../data/video/dana_480p_5fps.mp4'
+FILE_VIDEO_SRC = '../data/video/news_480p_5fps.mp4'
 FILE_VIDEO_RAW = '../result/records/raw.mp4'
 FILE_VIDEO_SR = '../result/records/sr.mp4'
 
