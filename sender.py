@@ -277,8 +277,9 @@ if __name__ == '__main__':
     # patch (for SR training)
     parser.add_argument('--patch-grid-height', type=int, default=12, help='Height of the patch grid')
     parser.add_argument('--patch-grid-width', type=int, default=16, help='Width of the patch grid')
-    parser.add_argument('--patch-sampling-frequency', type=float, default=2.0, help='the frequency of sampling patches')
-    parser.add_argument('--patch-sampling-num', type=int, default=10, help='the number of patches that each sampling process gets')
+    parser.add_argument('--patch-sampling-frequency', type=float, default=2.0, help='The frequency of sampling patches')
+    parser.add_argument('--patch-sampling-num', type=int, default=10, help='The number of patches that each sampling process gets')
+    parser.add_argument('--apply-psnr-filter', action='store_true', help='Apply PSNR filter when sampling patches')
 
     # signaling
     parser.add_argument('--signaling-host', type=str, default='127.0.0.1', help='TCP socket signaling host')
@@ -313,7 +314,7 @@ if __name__ == '__main__':
     patch_sampler = PatchSampler(hr_width=high_resolution.width, hr_height=high_resolution.height,
                                  lr_width=low_resolution.width, lr_height=low_resolution.height,
                                  patch_grid_height=args.patch_grid_height, patch_grid_width=args.patch_grid_width,
-                                 psnr_filter=True)
+                                 psnr_filter=args.apply_psnr_filter)
     patch_transmitter = PatchTransmitter(patch_sampler,
                                          sample_freq=args.patch_sampling_frequency,
                                          sample_num=args.patch_sampling_num)
