@@ -61,7 +61,14 @@ torchvision==0.8.2
 ```
 We also use `matplotlib` and `pandas` in analysis part, but they are not essential for the system.
 
-## Usage
+## Usage (LAN)
+
+- Server - `server.py`
+- Streamer - `sender.py`
+- Viewer - `receiver.py`
+
+Whenever possible, run three programs in three seperate computers.
+When only two computers are available, run streamer and viewer on the same device.
 
 ### Step 1 - start the server
 
@@ -76,14 +83,12 @@ and assign two ports for connecting sender and receiver.
 --signaling-host [ADDRESS_TO_SIGNALING_SERVER] : signaling server address
 --signaling-port-sender [PORT]
 --signaling-port-receiver [PORT] 
---ice-config [FILE] : JSON file for ICE server configurations
---ice-provider [STRING] : a key of the JSON file
 --debug : detailed logging
 ```
 
 ### Step 2 - start the sender
 
-To start the sender, you can stream from local file or webcam.
+The streamer can use local file or webcam as media source.
 
 **Frequently-used arguments**
 ```
@@ -92,8 +97,6 @@ To start the sender, you can stream from local file or webcam.
 --apply-psnr-filter : use PSNR filter
 --signaling-host [ADDRESS_TO_SIGNALING_SERVER] : signaling server address
 --signaling-port [PORT]
---ice-config [FILE] : JSON file for ICE server configurations
---ice-provider [STRING] : a key of the JSON file
 --debug : detailed logging
 ```
 
@@ -111,8 +114,6 @@ To run the receiver, make sure the framerate is correctly specified.
 --use-gpu
 --signaling-host [ADDRESS_TO_SIGNALING_SERVER] : signaling server address
 --signaling-port [PORT]
---ice-config [FILE] : JSON file for ICE server configurations
---ice-provider [STRING] : a key of the JSON file
 --debug : detailed logging
 ```
 
@@ -124,10 +125,23 @@ Use keyboard interrupt to stop any program.
 > 
 > A demo-oriented example is provided in the directory `demo`
 
-## Reference
+## WAN and ICE
 
-**Provided video**.
-https://www.youtube.com/watch?v=4AtOU0dDXv8
+A straight up connection across WAN between two peers might not work for many reasons.
+- Intermediate firewalls may block such connections.
+- Peers might not have public IP address to distinguish themselves.
+- Routers might not allow direct connection to certain peers.
+Interactive Connectivity Establishment (ICE) is a framework for establishing peer connections despite the above limitations.
+ICE uses STUN and/or TURN internally.
+  
+In the CLI, specify relevant arguments to explicitly use ICE in the system.
+A sample ice configuration file is provided in `ice.json`.
+```
+--ice-config [ICE_CONFIGURATION_FILE] : JSON file for ICE server configurations
+--ice-provider [KEY] : a top-level key in the JSON file (such as "google" or "xirsys")
+```
+
+## Reference
 
 **LiveNAS**.
 Kim, J., Jung, Y., Yeo, H., Ye, J., & Han, D. (2020). 
@@ -147,3 +161,9 @@ Lim, B., Son, S., Kim, H., Nah, S., & Lee, K. M. (2017).
 Enhanced deep residual networks for single image super-resolution. 
 2017 IEEE Conference on Computer Vision and Pattern Recognition Workshops (CVPRW), 1132–1140. 
 https://doi.org/10.1109/CVPRW.2017.151
+
+**ICE**.
+https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols
+
+**Provided video**.
+https://www.youtube.com/watch?v=4AtOU0dDXv8
