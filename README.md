@@ -128,9 +128,11 @@ Use keyboard interrupt to stop any program.
 ## WAN and ICE
 
 A straight up connection across WAN between two peers might not work for many reasons.
+
 - Intermediate firewalls may block such connections.
 - Peers might not have public IP address to distinguish themselves.
 - Routers might not allow direct connection to certain peers.
+
 Interactive Connectivity Establishment (ICE) is a framework for establishing peer connections despite the above limitations.
 ICE uses STUN and/or TURN internally.
   
