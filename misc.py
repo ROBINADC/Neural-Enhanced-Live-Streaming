@@ -35,7 +35,9 @@ class ClassLogger:
 
 class MostRecentSlot:
     """
-    A most-recent slot (a container with only one space) implemented in coroutine context
+    A most-recent slot (a container with only one space) implemented in coroutine context.
+    When producer adds an item to the slot, it empties the slot before adding the item.
+    When consumer requests an item, it waits until there is one.
     """
 
     def __init__(self):
@@ -53,13 +55,15 @@ class MostRecentSlot:
 class Patch:
     """
     Patch context
+    The actual patch representation that is transmitted through WebRTC data channel.
+    The fields timestamp and loc are not used for now.
     """
 
     def __init__(self, hr_patch=None, lr_patch=None, timestamp=None, loc=None):
         self.hr_patch = hr_patch
         self.lr_patch = lr_patch
-        self.timestamp = timestamp
-        self.loc = loc
+        # self.timestamp = timestamp
+        # self.loc = loc
 
 
 class Resolution:
@@ -105,6 +109,10 @@ def frame_to_ndarray(frame: VideoFrame) -> np.ndarray:
 
 
 def ndarray_to_bytes(a: np.ndarray) -> bytes:
+    """
+    Convert image in ndarray to bytes.
+    The image is compressed in JPEG with quality level 95.
+    """
     return cv2.imencode('.jpg', a, [int(cv2.IMWRITE_JPEG_QUALITY), 95])[1].tobytes()
 
 
@@ -115,7 +123,7 @@ def frame_to_bytes(frame: VideoFrame) -> bytes:
 
 
 def bytes_to_ndarray(b: bytes) -> np.ndarray:
-    return cv2.imdecode(np.frombuffer(b, dtype=np.uint8), cv2.IMREAD_COLOR)
+    return cv2.imdecode(np.frombuffer(b, dtype=np.uint8), cv2.IMREAD_COLOR)  #
 
 
 def frame_to_jpeg(frame: VideoFrame):

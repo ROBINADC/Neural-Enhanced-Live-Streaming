@@ -22,7 +22,7 @@ import cv2
 from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCConfiguration
 from aiortc.contrib.signaling import BYE, TcpSocketSignaling
 
-from media import MediaRelay, MediaPlayerDelta
+from media import MediaRelay, MediaPlayerDelta, MediaStreamTrack
 from misc import ClassLogger, Resolution, Patch, MostRecentSlot, get_ice_servers, frame_to_ndarray, ndarray_to_bytes, cal_psnr
 
 logger = logging.getLogger('sender')
@@ -195,7 +195,19 @@ class PatchTransmitter(ClassLogger):
         self._patch_channel = channel
 
 
-async def run_sender(pc: RTCPeerConnection, signaling, audio, video, patch_transmitter: PatchTransmitter):
+async def comm_server(pc, signaling, audio, video, patch_transmitter):
+    """
+    Sender communicates with server.
+    Send video and training patches to server.
+
+    Args:
+        pc (RTCPeerConnection): peer connection object
+        signaling (TcpSocketSignaling): signaling proxy. Could be other signaling tool. See aiortc.contrib.signaling for more.
+        audio (MediaStreamTrack or None): audio track of the media source
+        video (MediaStreamTrack): video track of the media source
+        patch_transmitter (PatchTransmitter):
+    """
+
     def add_senders():
         for t in pc.getTransceivers():
             if t.kind == 'audio' and audio:
@@ -208,6 +220,8 @@ async def run_sender(pc: RTCPeerConnection, signaling, audio, video, patch_trans
         logger.info('Received data channel: %s', channel.label)
 
         if channel.label == 'patch':
+            # if it is a patch channel, register it to the patch transmitter object
+            # which will place the patches to the channel
             patch_transmitter.patch_channel = channel
             patch_transmitter.start()
         elif channel.label == 'dummy':
@@ -307,6 +321,7 @@ if __name__ == '__main__':
 
     pc = RTCPeerConnection(rtc_config)
 
+    # determine resolution for both high- and low-quality streams
     aspect_ratio = Fraction(*map(int, args.aspect_ratio.split('x')))
     high_resolution = Resolution.get(args.hr_height, aspect_ratio)
     low_resolution = Resolution.get(args.lr_height, aspect_ratio)
@@ -324,10 +339,11 @@ if __name__ == '__main__':
     
     When the capability of the receiving device is insufficient,
     degrade the framerate of the original stream with level FR_DEG.
-    Sample 1 frame every FR_DEG frames.
+    The player will then sample only one frame every FR_DEG frames.
     For example, when the origin video is 30 fps,
     setting FR_DEG to 3 degrades the video to 10 fps;
-    setting FR_DEG to 6 degrades the video to 5 fps.
+    setting FR_DEG to 6 degrades the video to 5 fps;
+    setting FR_DEG to 1 imposes nothing to the original video.
     """
     fr_deg = args.framerate_degradation
     logger.info(f'Framerate degradation level is set to {fr_deg}')
@@ -361,7 +377,7 @@ if __name__ == '__main__':
     # run sender
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run_sender(pc, signaling, audio_track, video_track, patch_transmitter))
+        loop.run_until_complete(comm_server(pc, signaling, audio_track, video_track, patch_transmitter))
     except KeyboardInterrupt:
         logger.info('keyboard interrupt while running sender')
     finally:

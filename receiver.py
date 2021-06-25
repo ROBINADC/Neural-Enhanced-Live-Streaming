@@ -36,6 +36,10 @@ class DummyProcessor:
 
 
 class SuperResolutionProcessor(ClassLogger):
+    """
+    Processor for super-resolving a frame.
+    The SR model is replaced by the new model presented in model queue.
+    """
     def __init__(self, args):
         super(SuperResolutionProcessor, self).__init__('receiver')
 
@@ -65,6 +69,10 @@ class SuperResolutionProcessor(ClassLogger):
         self.log_info('finish setup')
 
     def process(self, image: np.ndarray) -> np.ndarray:
+        """
+        Super-resolve a frame
+        """
+
         # before processing a frame, check whether the model can be updated
         # current implementation checks at every frame, which can be refined later
         self._update_model()
@@ -123,7 +131,9 @@ class VideoProcessTrack(MediaStreamTrack):
 
     def __init__(self, track, processor):
         """
-        :param track: the original track to be processed
+        Args:
+            track (): the original track to be processed
+            processor (SuperResolutionProcessor):
         """
         super().__init__()
         self.track = track
@@ -133,10 +143,9 @@ class VideoProcessTrack(MediaStreamTrack):
 
     async def recv(self):
         """
-        Receive (generate) the next VideoFrame
-        :return: frame
+        Generate the next VideoFrame
         """
-        frame = await self.track.recv()  # read next frame from origin track
+        frame = await self.track.recv()  # read next frame from the original track
         img = frame.to_ndarray(format='bgr24')
         img = self.processor.process(img)
 
@@ -149,6 +158,18 @@ class VideoProcessTrack(MediaStreamTrack):
 
 
 async def comm_server(pc, signaling, processor, recorder_raw, recorder_sr):
+    """
+    Receiver communicates with server.
+    It receives video and models from server.
+
+    Args:
+        pc (RTCPeerConnection): peer connection object
+        signaling (TcpSocketSignaling): signaling proxy. Could be other signaling tool. See aiortc.contrib.signaling for more.
+        processor (SuperResolutionProcessor): the processor used to conduct per-frame processing
+        recorder_raw (MediaRecorderDelta): the recorder for the raw video
+        recorder_sr (MediaRecorderDelta): the recorder for the super-resolved video
+    """
+
     @pc.on('track')
     def on_track(track):
         logger.info('Received track from server')

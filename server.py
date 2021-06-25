@@ -100,7 +100,7 @@ class ModelTransmitter(ClassLogger):
 
 class TrackScheduler(ClassLogger):
     """
-    Track scheduler is used in the server to schedule a track.
+    Track scheduler is used to schedule a track in the server.
 
     - invoke set_track when track is ready
     - async call to get_track will return the internal track
@@ -148,7 +148,8 @@ class TrackScheduler(ClassLogger):
 
 def run_trainer(patch_queue, model_queue, args):
     """
-    This function is invoked in another process to run the trainer
+    Run the online trainer.
+    This function is invoked in another process.
     """
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)  # setup logging
 
@@ -157,6 +158,12 @@ def run_trainer(patch_queue, model_queue, args):
 
 
 class OnlineTrainer(ClassLogger):
+    """
+    A class for online training.
+    The trainer continuously fetches the training patches from the patch queue, and add them to the ExtendableDataset.
+    The trainer trains the model using all patches in the dataset.
+    After every training epoch, the model will be delivered to the model queue.
+    """
     def __init__(self, patch_queue, model_queue, args):
         super().__init__('server')
 
@@ -348,13 +355,15 @@ class OnlineTrainer(ClassLogger):
 
 async def comm_sender(pc, signaling, patch_queue, track_scheduler):
     """
-    Communicates with sender
+    Communicate with sender program.
+    Receive track from sender and hand over it to the track scheduler.
+    Receive patches from sender and add them to the patch queue.
 
     Args:
         pc (RTCPeerConnection): peer connection object
-        signaling (): signaling object
-        patch_queue (mp.Queue): multiprocessing queue that is used to place the training patches
-        track_scheduler (TrackScheduler):
+        signaling (TcpSocketSignaling): signaling proxy. Could be other signaling tool. See aiortc.contrib.signaling for more.
+        patch_queue (mp.Queue): multiprocessing queue that is used to place the training patches (for trainer, as it runs in another process)
+        track_scheduler (TrackScheduler): responsible to receive the media track sent from sender, and consume frames from head
     """
 
     def log_info(msg, *args):
@@ -398,7 +407,7 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
         hr_array = bytes_to_ndarray(hr_bytes)
         lr_array = bytes_to_ndarray(lr_bytes)
         patch_queue.put((hr_array, lr_array))
-        # If you want to generate offline training data
+        # In case you need to generate offline training data ...
         # cv2.imwrite(f'data/360p/{i:04d}_lr.png', lr_array)
         # cv2.imwrite(f'data/720p/{i:04d}_hr.png', hr_array)
         i += 1
@@ -427,16 +436,15 @@ async def comm_sender(pc, signaling, patch_queue, track_scheduler):
 
 async def comm_receiver(pc, signaling, model_queue, track_scheduler):
     """
-    Communicate with receiver
+    Communicate with receiver program.
+    Send video to the receiver (obtain track from the track scheduler).
+    Send SR models to the receiver using model transmitter.
 
     Args:
         pc (RTCPeerConnection): peer connection
-        signaling (): signaling object
+        signaling (TcpSocketSignaling): signaling proxy. Could be other signaling tool. See aiortc.contrib.signaling for more.
         model_queue (mp.Queue): multiprocessing queue that is used to place SR models
         track_scheduler (TrackScheduler):
-
-    Returns:
-
     """
     def log_info(msg):
         logger.info(f'@Receiver {msg}')

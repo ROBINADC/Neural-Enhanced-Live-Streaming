@@ -170,6 +170,15 @@ def player_worker_delta(
         loop, container, streams, audio_track, video_track, quit_event, throttle_playback,
         frame_height, frame_width, slot, framerate_degradation
 ):
+    """
+    A worker to play the media stream
+
+    Change list:
+    - the idle time for throttle playback
+    - accept specified frame size (height, width), which the original frame is resized to
+    - a slot for placing most-recent original frame and its low-quality version
+    - reduce framerate in terms of framerate_degradation
+    """
     audio_fifo = av.AudioFifo()
     audio_format_name = "s16"
     audio_layout_name = "stereo"
@@ -476,9 +485,11 @@ class MediaPlayerDelta:
 
     Change list:
     - use PlayerStreamTrackDelta as internal track
-    - add argument frame_height, frame_width for cropping frame
+    - use player_worker_delta to crop frame and add pair to most-recent slot
+    - add arguments frame_height, frame_width for cropping frame
     - add argument frame_pair_queue for (hr_frame, lr_frame) pairs
-    - use player_worker_delta to crop frame and add pair to queue
+    - add argument slot for placing the most-recent frame
+    - add argument framerate_degradation to reduce framerate when necessary
     """
 
     def __init__(self, file, frame_width, frame_height, slot=None, framerate_degradation=1, format=None, options={}):
@@ -655,9 +666,9 @@ class MediaRecorderDelta:
     A delta adaption for class MediaRecorder
 
     Change list:
-    - add method stop_after_finish, which will not stop the recorder until the recording is done
     - add arguments width, height, fps to constructor, allowing different recording settings
-    - enable an optional logfile to log each frame information
+    - enable an optional log file to write the timestamp of each frame
+    - [Not really in used] add method stop_after_finish, which will not stop the recorder until the recording is done
     """
 
     def __init__(self, file, logfile: str = None, width: int = None, height: int = None, fps: int = 30, format=None, options={}):
