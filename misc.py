@@ -15,6 +15,7 @@ from typing import List
 import numpy as np
 from av import VideoFrame
 import cv2
+import torch.nn as nn
 from aiortc import RTCIceServer
 
 
@@ -178,3 +179,22 @@ def get_ice_servers(file: str = None, provider: str = None) -> List[RTCIceServer
     ice_servers = [RTCIceServer(**sv) for sv in server_list]
 
     return ice_servers
+
+
+def count_model_parameters(model: nn.Module) -> int:
+    """
+    Get the number of trainable parameters in the neural network
+
+    Args:
+        model (nn.Module): neural network
+
+    Returns:
+        the number of trainable parameters in the neural network
+    """
+
+    count = 0
+    for layer, param in model.named_parameters():
+        if param.requires_grad:
+            count += np.prod(param.shape).item()
+        # print(layer, param.shape)
+    return count

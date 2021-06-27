@@ -164,6 +164,7 @@ class OnlineTrainer(ClassLogger):
     The trainer trains the model using all patches in the dataset.
     After every training epoch, the model will be delivered to the model queue.
     """
+
     def __init__(self, patch_queue, model_queue, args):
         super().__init__('server')
 
@@ -446,6 +447,7 @@ async def comm_receiver(pc, signaling, model_queue, track_scheduler):
         model_queue (mp.Queue): multiprocessing queue that is used to place SR models
         track_scheduler (TrackScheduler):
     """
+
     def log_info(msg):
         logger.info(f'@Receiver {msg}')
 
