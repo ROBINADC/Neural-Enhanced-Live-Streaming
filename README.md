@@ -27,7 +27,7 @@ it applies it to the ongoing LR video in a per-frame super-resolution manner, ge
 ### Core
 
 - dataset.py : dataset objects used for neural training
-- media.py : a replication of `aiortc.contrib.media` with modifications on some classes and functions
+- media.py : a copy of `aiortc.contrib.media` with modifications on some classes and functions
 - misc.py : utilities
 - model.py : the Super-Resolution neural network and its components
 - receiver.py : implementation of video viewer
@@ -37,12 +37,12 @@ it applies it to the ongoing LR video in a per-frame super-resolution manner, ge
 ### Aside
 
 - analysis/ : scripts for analysis and visualization
-- assets/
+- assets/ : images in README
 - data/
     - video/
         - news_480p_30fps.mp4 : a sample video
-- demo/
-- example/ : minimal settings for running the system
+- demo/ : scripts used in the demo
+- example/ : scripts with minimal settings for running the system
 - result/ (*generated at runtime*)
     - logs/ : runtime log files
     - records/ : recorded raw and super-resolved video

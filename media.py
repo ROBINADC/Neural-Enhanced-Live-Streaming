@@ -1,6 +1,6 @@
 """
-media.py is an adaption for aiortc.contrib.media
-Adapted functions or classes have suffix "Delta" or "delta".
+media.py modifies some components in aiortc.contrib.media to meet the functional requirements of our framework.
+Adapted classes and functions have suffix "Delta" and "delta" respectively.
 """
 
 __author__ = "Yihang Wu"

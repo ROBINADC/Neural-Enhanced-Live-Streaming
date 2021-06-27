@@ -1,6 +1,6 @@
 """
-Single-scale super-resolution neural model and the internal functional modules.
-The model is adapted from NAS
+Single-scale super-resolution neural model and its internal functional modules.
+The model is a simplification of NAS's SingleNetwork.
 
 References: https://github.com/kaist-ina/NAS_public
 """
@@ -13,16 +13,14 @@ import torch.nn as nn
 
 
 class SingleNetwork(nn.Module):
-    """
-    A single scale super-resolution neural model.
-    """
-
-    VALID_SCALES = (1, 2, 3, 4)
+    VALID_SCALES = (1, 2, 3, 4)  # the up-scaling factors of images
 
     def __init__(self, scale, num_blocks, num_channels, num_features, bias=True, activation=nn.ReLU(True)):
         """
+        A single-scale single-image super-resolution neural model.
+
         Args:
-            scale (int): up-scaling factor. The width of hr image is scale times than lr image
+            scale (int): up-scaling factor. The width of hr image is [scale] times larger than that of a lr image
             num_blocks (int): the number of residual blocks
             num_channels (int): the number of channels in an image
             num_features (int): the number of channels used throughout convolutional computations
@@ -36,7 +34,8 @@ class SingleNetwork(nn.Module):
         self.num_channels = num_channels
         self.num_features = num_features
 
-        assert self.scale in SingleNetwork.VALID_SCALES
+        if self.scale not in SingleNetwork.VALID_SCALES:
+            raise NotImplementedError
 
         # No early-exit implemented
 
@@ -66,7 +65,7 @@ class SingleNetwork(nn.Module):
         input shape (*, num_channels, input_height, input_width)
         output shape (*, num_channels, target_height, target_width)
         """
-        x = self.head(x)
+        x = self.head(x)  # (*, num_features, input_height, input_width)
 
         res = x
         for i in range(self.num_blocks):
@@ -74,11 +73,11 @@ class SingleNetwork(nn.Module):
         res = self.body_end(res)
         res += x  # residual connection
 
-        x = res
+        x = res  # (*, num_features, input_height, input_width)
         if self.scale > 1:
-            x = self.upsampler(x)
+            x = self.upsampler(x)  # (*, num_features, target_height, target_width)
 
-        x = self.tail(x)
+        x = self.tail(x)  # (*, num_channels, target_height, target_width)
 
         return x
 
@@ -87,11 +86,13 @@ class ResidualBlock(nn.Module):
     def __init__(self, num_feats: int, bias: bool = True, batch_norm: bool = False, act: nn.Module = nn.ReLU(True),
                  residual_scale=1):
         """
+        The residual block in SingalNetwork, which is a stack of Conv, ReLU, Conv and Sum.
+
         Args:
             num_feats (int): the number of channels of the convolutional kernel
             bias (bool): whether to use bias value
             batch_norm (bool): whether to use batch normalization
-            act (nn.Module): activation
+            act (nn.Module): activation function
             residual_scale (float): the factor to scale the residual
         """
         super(ResidualBlock, self).__init__()
@@ -118,11 +119,17 @@ class ResidualBlock(nn.Module):
 
 
 class Upsampler(nn.Module):
-    """
-    Up-sample the inputs to target outputs in terms of specified scaling factor
-    """
-
     def __init__(self, scale: int, num_feats: int, bias: bool = True, batch_norm: bool = False, act: nn.Module = None):
+        """
+        This module up-samples the inputs to target outputs in terms of a specified scaling factor
+
+        Args:
+            scale (int): scaling factor
+            num_feats (int): the number of channels of the image
+            bias (bool): whether to use bias value
+            batch_norm (bool): whether to use batch normalization
+            act (nn.Module): activation function
+        """
         super(Upsampler, self).__init__()
 
         modules = []
