@@ -22,10 +22,10 @@ class SingleNetwork(nn.Module):
         Args:
             scale (int): up-scaling factor. The width of hr image is [scale] times larger than that of a lr image
             num_blocks (int): the number of residual blocks
-            num_channels (int): the number of channels in an image
+            num_channels (int): the number of channels in an image, default 3 for BGR color channels
             num_features (int): the number of channels used throughout convolutional computations
-            bias (bool): add bias or not
-            activation (nn.Module): activate function
+            bias (bool): whether to use bias in convolutional layers
+            activation (nn.Module): activate function used in residual blocks
         """
         super(SingleNetwork, self).__init__()
 
@@ -39,12 +39,12 @@ class SingleNetwork(nn.Module):
 
         # No early-exit implemented
 
-        # Head of a single NAS model
+        # Head of model
         self.head = nn.Sequential(nn.Conv2d(in_channels=self.num_channels, out_channels=self.num_features,
                                             kernel_size=3, stride=1, padding=1, bias=bias))
 
         # Body of model - consecutive residual blocks
-        self.body = nn.ModuleList()
+        self.body = nn.ModuleList()  # ModuleList does not have a forward method
         for _ in range(self.num_blocks):
             self.body.append(nn.Sequential(ResidualBlock(num_feats=self.num_features, bias=bias, act=activation)))
 
@@ -67,7 +67,7 @@ class SingleNetwork(nn.Module):
         """
         x = self.head(x)  # (*, num_features, input_height, input_width)
 
-        res = x
+        res = x  # global residual
         for i in range(self.num_blocks):
             res = self.body[i](res)
         res = self.body_end(res)
@@ -86,12 +86,12 @@ class ResidualBlock(nn.Module):
     def __init__(self, num_feats: int, bias: bool = True, batch_norm: bool = False, act: nn.Module = nn.ReLU(True),
                  residual_scale=1):
         """
-        The residual block in SingalNetwork, which is a stack of Conv, ReLU, Conv and Sum.
+        The residual block in SingleNetwork, which is a stack of Conv, ReLU, Conv and Sum layers.
 
         Args:
             num_feats (int): the number of channels of the convolutional kernel
-            bias (bool): whether to use bias value
-            batch_norm (bool): whether to use batch normalization
+            bias (bool): whether to use bias in convolutional layers, default true
+            batch_norm (bool): whether to apply batch normalization after convolutional layers, default false (different from SRResNet)
             act (nn.Module): activation function
             residual_scale (float): the factor to scale the residual
         """
@@ -126,8 +126,8 @@ class Upsampler(nn.Module):
         Args:
             scale (int): scaling factor
             num_feats (int): the number of channels of the image
-            bias (bool): whether to use bias value
-            batch_norm (bool): whether to use batch normalization
+            bias (bool): whether to use bias in convolutional layers, default true
+            batch_norm (bool): whether to apply batch normalization, default false
             act (nn.Module): activation function
         """
         super(Upsampler, self).__init__()

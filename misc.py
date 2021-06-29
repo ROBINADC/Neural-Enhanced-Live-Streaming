@@ -197,4 +197,5 @@ def count_model_parameters(model: nn.Module) -> int:
         if param.requires_grad:
             count += np.prod(param.shape).item()
         # print(layer, param.shape)
+    # print(count)
     return count

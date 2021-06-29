@@ -40,6 +40,7 @@ class SuperResolutionProcessor(ClassLogger):
     Processor for super-resolving a frame.
     The SR model is replaced by the new model presented in model queue.
     """
+
     def __init__(self, args):
         super(SuperResolutionProcessor, self).__init__('receiver')
 
@@ -49,7 +50,7 @@ class SuperResolutionProcessor(ClassLogger):
         self.pretrained_fp = args.pretrained_fp
         self.device = 'cuda' if args.use_gpu else 'cpu'
 
-        self._model_queue = queue.SimpleQueue()
+        self._model_queue = queue.SimpleQueue()  # for incoming models
 
         self._setup()
 
@@ -59,7 +60,7 @@ class SuperResolutionProcessor(ClassLogger):
         else:
             self.model = self.model.to(self.device)  # pytorch conv cpu version not support fp16
 
-        # using pretrained model at receiver side is trivial (as it is replaced by new model in short time)
+        # using pretrained model at receiver side is trivial (as it is replaced by a new model in short time)
         if self.load_pretrained and self.pretrained_fp and os.path.exists(self.pretrained_fp):
             self.model.load_state_dict(torch.load(self.pretrained_fp))
             self.log_info('load pretrained model (NOT RECOMMAND)')
@@ -70,19 +71,19 @@ class SuperResolutionProcessor(ClassLogger):
 
     def process(self, image: np.ndarray) -> np.ndarray:
         """
-        Super-resolve a frame
+        Super-resolve a frame represented in uint8 ndarray
         """
 
         # before processing a frame, check whether the model can be updated
         # current implementation checks at every frame, which can be refined later
         self._update_model()
 
-        x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3)
+        x = torch.from_numpy(image).byte().to(self.device)  # (lr_height, lr_width, 3), torch.uint8
         x = x.permute(2, 0, 1)  # (3, lr_height, lr_width)
         if self.device == 'cuda':
-            x = x.half()  # x.to(torch.float16)
+            x = x.half()  # equivalent to x.to(torch.float16)
         else:
-            x = x.float()  # x.to(torch.float32)
+            x = x.float()  # equivalent to x.to(torch.float32)
 
         x.div_(255)
         x.unsqueeze_(0)  # (1, 3, lr_height, lr_width)
@@ -91,7 +92,7 @@ class SuperResolutionProcessor(ClassLogger):
         out = out.data[0].permute(1, 2, 0)  # (hr_height, hr_width, 3)
         out = out * 255
         out = torch.clamp(out, 0, 255)
-        out = out.byte()
+        out = out.byte()  # transform back to torch.uint8
 
         hr_image = out.cpu().numpy()  # (hr_height, hr_width, 3)
         return hr_image
