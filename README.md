@@ -46,7 +46,7 @@ it applies it to the ongoing LR video in a per-frame super-resolution manner, ge
 ├── data
 │   └── video       contains a sample video  
 ├── demo            scripts used in the university demo
-├── example         scripts with minimal settings to run the system [USE THIS FOR QUICKSTART]
+├── quickstart      scripts with minimal settings to run the system [USE THIS FOR QUICKSTART]
 ├── ice.json        configuration for STUN and TURN servers (not a necessity)
 ├── offline.py      an offline training example
 └── result          result generated at runtime
@@ -65,6 +65,11 @@ pytorch==1.7.1
 torchvision==0.8.2
 ```
 We also use `matplotlib` and `pandas` in analysis part, but they are not essential for the system.
+
+## Quickstart (LAN)
+
+[Here](https://github.com/ROBINADC/Neural-Enhanced-Live-Streaming/tree/master/quickstart)
+are some scripts for you to run the program with minimal configuration changes.
 
 ## Usage (LAN)
 
@@ -126,13 +131,9 @@ To run the receiver, make sure the framerate is correctly specified.
 
 Use keyboard interrupt to stop any program.
 
-> A scripting example with executable settings is provided in the directory `example`
-> 
-> A demo-oriented example is provided in the directory `demo`
-
 ## WAN and ICE
 
-A straight up connection across WAN between two peers might not work for many reasons.
+A straight-up connection across WAN between two peers might not work for many reasons.
 
 - Intermediate firewalls may block such connections.
 - Peers might not have public IP address to distinguish themselves.

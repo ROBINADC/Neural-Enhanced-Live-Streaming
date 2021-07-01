@@ -1,11 +1,11 @@
-# Example
+# Quickstart
 
-A rather easy-to-configure example to run the program in LAN.
+A fairly easy-to-configure quickstart example to run the system on a LAN.
 
 In this example, we use two devices to demonstrate how Epsilon works.
-The server is hosted on a Windows device, while the sender and receiver reside on another Linux device.
-Both devices are equipped with GPUs.
 
+We assume the server is hosted on a Windows device, while the sender and receiver reside on another Linux device.
+Both devices are equipped with GPUs.
 If you have other device or OS configuration, please refer to these scripts to write your own scripts.
 
 ## Procedure
@@ -14,3 +14,4 @@ If you have other device or OS configuration, please refer to these scripts to w
 2. Run `run_server.bat` in a Windows device (with GPU)
 3. Run `run_sender.sh` in a Linux device
 4. Run `run_receiver.sh` in the same Linux device (with GPU)
+5. Check ... [TO BE CONTINUED]
