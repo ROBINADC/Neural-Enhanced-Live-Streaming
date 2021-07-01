@@ -26,28 +26,33 @@ it applies it to the ongoing LR video in a per-frame super-resolution manner, ge
 
 ### Core
 
-- dataset.py : dataset objects used for neural training
-- media.py : a copy of `aiortc.contrib.media` with modifications on some classes and functions
-- misc.py : utilities
-- model.py : the Super-Resolution neural network and its components
-- receiver.py : implementation of video viewer
-- sender.py : implementation of video streamer
-- server.py : live-streaming server augmented with online neural training
+```
+.
+├── dataset.py      dataset objects used for neural training
+├── media.py        a copy of aiortc.contrib.media with modifications on some classes and functions
+├── misc.py         utilities
+├── model.py        the Super-Resolution neural network and its components
+├── receiver.py     implementation of video viewer
+├── sender.py       implementation of video streamer
+└── server.py       live-streaming server augmented with online neural training
+```
 
 ### Aside
 
-- analysis/ : scripts for analysis and visualization
-- assets/ : images in README
-- data/
-    - video/
-        - news_480p_30fps.mp4 : a sample video
-- demo/ : scripts used in the demo
-- example/ : scripts with minimal settings for running the system
-- result/ (*generated at runtime*)
-    - logs/ : runtime log files
-    - records/ : recorded raw and super-resolved video
-- ice.json : configuration for STUN and TURN servers (not a necessity)
-- offline.py : an offline training example
+```
+.
+├── analysis        scripts for analysis and visualization
+├── assets          images in README
+├── data
+│   └── video       contains a sample video  
+├── demo            scripts used in the university demo
+├── example         scripts with minimal settings to run the system [USE THIS FOR QUICKSTART]
+├── ice.json        configuration for STUN and TURN servers (not a necessity)
+├── offline.py      an offline training example
+└── result          result generated at runtime
+    ├── logs        runtime log files
+    └── records     recorded raw and super-resolved video
+```
 
 ## Dependencies
 
