@@ -13,7 +13,7 @@ The framework is built on top of `aiortc`.
 In our scenario, a streamer streams a low-resolution (LR) video to the server.
 At the same time, the streamer will sample training patches, which are sent to the server along with the video.
 Upon receiving the LR video sent from streamer, the server relays the video to the viewer. 
-The server also maintains an SR model for the video, and uses patches to train it.
+The server also maintains a super-resolution (SR) model for the video, and uses patches to train it.
 After each training epoch, the trained model is delivered to the viewer.
 Once the viewer receives an SR model, 
 it applies it to the ongoing LR video in a per-frame super-resolution manner, generating a high-resolution (HR) video.
